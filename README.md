@@ -1,2 +1,2 @@
-# BayesianGraphCNN
-Bayesian Graph Convolutional Neural Networks
+# BayesianCNN
+Bayesian Convolutional Neural Networks
