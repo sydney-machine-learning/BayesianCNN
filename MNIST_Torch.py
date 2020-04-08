@@ -32,7 +32,7 @@ input_size = 320
 hidden_size = 50
 num_layers = 2
 num_classes = 10
-batch_size = 50
+batch_size = 10
 num_epochs = 2
 learning_rate = 0.01
 
@@ -102,13 +102,13 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 400
+        size = 50
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
         samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True, transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                      torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
-        size = 2000
+        size = 500
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     data_loader = torch.utils.data.DataLoader(a,
@@ -151,11 +151,11 @@ parser = argparse.ArgumentParser(description='PTBayeslands modelling')
 
 parser.add_argument('-n', '--net', help='Choose rnn net, "1" for RNN, "2" for GRU, "3" for LSTM', default=4, dest="net",
                     type=int)
-parser.add_argument('-s', '--samples', help='Number of samples', default=5000, dest="samples", type=int)
+parser.add_argument('-s', '--samples', help='Number of samples', default=400, dest="samples", type=int)
 parser.add_argument('-r', '--replicas', help='Number of chains/replicas, best to have one per availble core/cpu',
-                    default=10, dest="num_chains", type=int)
+                    default=4, dest="num_chains", type=int)
 parser.add_argument('-t', '--temperature', help='Demoninator to determine Max Temperature of chains (MT=no.chains*t) ',
-                    default=10, dest="mt_val", type=int)
+                    default=2, dest="mt_val", type=int)
 parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.02, type=float)
 parser.add_argument('-b', '--burn', help='How many samples to discard before determing posteriors', dest="burn_in",
                     default=0.25, type=float)
@@ -175,12 +175,13 @@ class Model(nn.Module):
         super(Model, self).__init__()
         if rnn_net == 'CNN':
             print("CNN")
-            self.conv1 = nn.Conv2d(1, 10, 5, 1)
-            self.conv2 = nn.Conv2d(10, 20, 5, 1)
-            self.fc1 = nn.Linear(320, 50)
-            self.fc2 = nn.Linear(50, 10)
+            self.conv1 = nn.Conv2d(1, 32, 5, 1)
+            self.conv2 = nn.Conv2d(32, 64, 5, 1)
+            self.fc1 = nn.Linear(1024, 10)
+            #self.fc2 = nn.Linear(128, 10)
 
             self.batch_size = batch_size
+            self.sigmoid = nn.Sigmoid()
             self.topo = topo
             self.los = 0
             self.softmax = nn.Softmax(dim=1)
@@ -227,11 +228,13 @@ class Model(nn.Module):
         x = F.max_pool2d(x, 2)
         # x = F.relu(x)
         x = torch.flatten(x, 1)
-        # print("X Shape")
-        # print(x.shape)
-        x = self.fc1(x)
         x = F.relu(x)
-        x = self.fc2(x)
+        #print("X Shape")
+        #print(x.shape)
+        x = self.fc1(x)
+        #x = nn.Sigmoid(x)
+        #x=F.relu(x)
+        #x = self.fc2(x)
         # x = F.relu(x)
         return x
 
@@ -264,7 +267,9 @@ class Model(nn.Module):
             # print(a)
             # print(a.shape)
             # f()
-            prob[i] = self.softmax(a)
+            b=copy.deepcopy(a)
+            prob[i]=self.softmax(b)
+            #prob[i] = self.softmax(a)
             # print(predicted.shape)
             # print(labels.shape)
             loss = self.criterion(a, labels)
@@ -285,8 +290,8 @@ class Model(nn.Module):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            if (i % 50 == 0):
-                print(loss.item(), ' is loss', i)
+            #if (i % 50 == 0):
+                #print(loss.item(), ' is loss', i)
             self.los += copy.deepcopy(loss.item())
         # print(lo,' is loss')
         return copy.deepcopy(self.state_dict())
@@ -437,23 +442,23 @@ class ptReplica(multiprocessing.Process):
         # w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  # num of weights and bias
         w_size = len(rnn.getparameters(w))
         # pos_w = np.ones((samples, w_size)) #Posterior for all weights
-        # pos_w = np.ones((samples, w_size)) #Posterior for all weights
+        #pos_w = np.ones((samples, w_size)) #Posterior for all weights
         # lhood_list = np.zeros((samples,1))
         # surrogate_list = np.zeros((samples,1))
-        # fxtrain_samples = np.ones((batch_save, trainsize)) #Output of regression FNN for training samples
-        # fxtest_samples = np.ones((batch_save, testsize)) #Output of regression FNN for testing samples
-        # rmse_train  = np.zeros(samples)
-        # rmse_test = np.zeros(samples)
-        # acc_train = np.zeros(samples)
-        # acc_test = np.zeros(samples)
+        #fxtrain_samples = np.ones((batch_save, trainsize)) #Output of regression FNN for training samples
+        #fxtest_samples = np.ones((batch_save, testsize)) #Output of regression FNN for testing samples
+        rmse_train  = np.zeros(samples)
+        rmse_test = np.zeros(samples)
+        acc_train = np.zeros(samples)
+        acc_test = np.zeros(samples)
         learn_rate = self.learn_rate
         # print('yellow')
         eta = 0  # Junk variable
         # print(w,self.temperature)
-        # w_proposal = np.random.randn(w_size)
-        # w_proposal = rnn.dictfromlist(w_proposal)
+        w_proposal = np.random.randn(w_size)
+        w_proposal = rnn.dictfromlist(w_proposal)
         # Randomwalk Steps
-        step_w = 0.01
+        step_w = 0.001
         # Declare FNN
 
         train = self.traindata  # data_load(data='train')
@@ -478,7 +483,7 @@ class ptReplica(multiprocessing.Process):
         [likelihood, pred_train, rmsetrain] = self.likelihood_func(rnn, train)
         [_, pred_test, rmsetest] = self.likelihood_func(rnn, test)
 
-        print(time.time() - t1, ' time elapsed in sec for likelihood')
+        #print(time.time() - t1, ' time elapsed in sec for likelihood')
 
         # Beginning Sampling using MCMC RANDOMWALK
         y_test = torch.zeros((len(test), self.batch_size))
@@ -502,13 +507,19 @@ class ptReplica(multiprocessing.Process):
         langevin_count = 0
         pt_samples = samples * 0.6  # this means that PT in canonical form with adaptive temp will work till pt  samples are reached
         init_count = 0
-        # pos_w[0] = rnn.getparameters(w_proposal)
-        # fxtrain_samples[i + 1,] = fxtrain_samples[i,]
-        # fxtest_samples[i + 1,] = fxtest_samples[i,]
-        # rmse_train[0] = rmsetrain
-        # rmse_test[0] = rmsetest
-        # acc_train[0] = self.accuracy(pred_train,y_train)
-        # acc_test[0] = self.accuracy(pred_test,y_test)
+        #pos_w[0] = rnn.getparameters(w_proposal)
+        #fxtrain_samples[i + 1,] = fxtrain_samples[i,]
+        #fxtest_samples[i + 1,] = fxtest_samples[i,]
+        rmse_train[0] = rmsetrain
+        rmse_test[0] = rmsetest
+        #acc_train[0] = self.accuracy(pred_train, y_train)
+        #acc_test[0] = self.accuracy(pred_test,y_test)
+
+        acc_train[0] = self.accuracy(train)
+        acc_test[0] = self.accuracy(test)
+
+        #acc_train[0] = 50.0
+        #acc_test[0] = 50.0
 
         # print('i and samples')
         for i in range(
@@ -526,7 +537,9 @@ class ptReplica(multiprocessing.Process):
             lx = np.random.uniform(0, 1, 1)
             old_w = rnn.state_dict()
             if (self.use_langevin_gradients is True) and (lx < self.l_prob):
-                print('using langevin')
+                #print("Needed")
+
+                #print('using langevin')
                 w_gd = rnn.langevin_gradient(train)  # Eq 8
                 w_proposal = rnn.addnoiseandcopy(0, step_w)  # np.random.normal(w_gd, step_w, w_size) # Eq 7
                 w_prop_gd = rnn.langevin_gradient(train)
@@ -541,6 +554,7 @@ class ptReplica(multiprocessing.Process):
                 diff_prop = diff_prop / self.adapttemp
                 langevin_count = langevin_count + 1
             else:
+                #print("Not needed")
                 diff_prop = 0
                 w_proposal = rnn.addnoiseandcopy(0, step_w)  # np.random.normal(w, step_w, w_size)
 
@@ -579,34 +593,37 @@ class ptReplica(multiprocessing.Process):
             # prop_list[i,] = rnn.getparameters(w_proposal)
             # likeh_list[i,0] = likelihood_proposal * self.adapttemp
 
-            # print(u,mh_prob, ' sample')
+            #print(u,mh_prob, ' sample')
+
             if u < mh_prob:
                 num_accepted = num_accepted + 1
                 likelihood = likelihood_proposal
                 prior_current = prior_prop
                 w = copy.deepcopy(w_proposal)  # rnn.getparameters(w_proposal)
-                acc_train = self.accuracy(train)
-                acc_test = self.accuracy(test)
-                print (i, rmsetrain, rmsetest, acc_train, acc_test, 'accepted')
-                # pos_w[i,] = rnn.getparameters(w_proposal)
-                # fxtrain_samples[i + 1] = pred_train.view(trainsize)
-                # fxtest_samples[i + 1] = pred_test.view(testsize)
-                # rmse_train[i] = rmsetrain
-                # rmse_test[i] = rmsetest
+                acc_train1 = self.accuracy(train)
+                acc_test1 = self.accuracy(test)
+                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'accepted')
+                #pos_w[i,] = rnn.getparameters(w_proposal)
+                #fxtrain_samples[i + 1] = pred_train.view(trainsize)
+                #fxtest_samples[i + 1] = pred_test.view(testsize)
+                rmse_train[i] = rmsetrain
+                rmse_test[i] = rmsetest
+                acc_train[i,] = acc_train1
+                acc_test[i,] = acc_test1
                 # x = x + 1
             else:
                 w = old_w
                 rnn.loadparameters(w)
-                acc_train = self.accuracy(train)
-                acc_test = self.accuracy(test)
-                print (i, rmsetrain, rmsetest, acc_train, acc_test, 'rejected')
-                # pos_w[i,] = pos_w[i-1,]
-                # fxtrain_samples[i + 1,] = fxtrain_samples[i,]
-                # fxtest_samples[i + 1,] = fxtest_samples[i,]
-                # rmse_train[i,] = rmse_train[i-1,]
-                # rmse_test[i,] = rmse_test[i-1,]
-                # acc_train[i,] = acc_train[i-1,]
-                # acc_test[i,] = acc_test[i-1,]
+                acc_train1 = self.accuracy(train)
+                acc_test1 = self.accuracy(test)
+                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'rejected')
+                #pos_w[i,] = pos_w[i-1,]
+                #fxtrain_samples[i + 1,] = fxtrain_samples[i,]
+                #fxtest_samples[i + 1,] = fxtest_samples[i,]
+                rmse_train[i,] = rmse_train[i-1,]
+                rmse_test[i,] = rmse_test[i-1,]
+                acc_train[i,] = acc_train[i-1,]
+                acc_test[i,] = acc_test[i-1,]
 
                 # x = x + 1
             # SWAPPING PREP
@@ -616,61 +633,57 @@ class ptReplica(multiprocessing.Process):
                                         np.asarray([likelihood]), np.asarray([self.temperature]), np.asarray([i])])
                 self.parameter_queue.put(param)
                 self.signal_main.set()
-                self.event.wait()
-                # retrieve parameters fom queues if it has been swapped
-                if not self.parameter_queue.empty():
-                    result = self.parameter_queue.get()
-                    w = rnn.dictfromlist(result[0:w_size])
-                    eta = result[w_size]
-                    # likelihood = result[w_size+1] # /temperature or not
-                    # print('temperature and swapped weights')
-                else:
-                    print("Khali")
                 self.event.clear()
+                self.event.wait()
+                result = self.parameter_queue.get()
+                w = rnn.dictfromlist(result[0:w_size])
+                eta = result[w_size]
 
             if i % 100 == 0:
-                print(i, rmsetrain, rmsetest, 'i and rmse train and test')
-        param = np.concatenate(
-            [np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1), np.asarray([likelihood]),
-             np.asarray([self.temperature]), np.asarray([i])])
+                print(i, rmsetrain, rmsetest, 'Iteration Number and RMSE Train & Test')
+        param = np.concatenate([np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1), np.asarray([likelihood]),np.asarray([self.temperature]), np.asarray([i])])
         # print('SWAPPED PARAM',self.temperature,param)
-        self.parameter_queue.put(param)
+        # self.parameter_queue.put(param)
+        self.signal_main.set()
         # param = np.concatenate([s_pos_w[i-self.surrogate_interval:i,:],lhood_list[i-self.surrogate_interval:i,:]],axis=1)
         # self.surrogate_parameterqueue.put(param)
-
-        print ((num_accepted * 100 / (samples * 1.0)), '% was accepted')
+        print ((num_accepted * 100 / (samples * 1.0)), '% was Accepted')
         accept_ratio = num_accepted / (samples * 1.0) * 100
 
-        print ((langevin_count * 100 / (samples * 1.0)), '% was Lsnngrevin ')
+        print ((langevin_count * 100 / (samples * 1.0)), '% was Langevin')
         langevin_ratio = langevin_count / (samples * 1.0) * 100
+        print('Exiting the Thread',self.temperature)
 
-        # file_name = self.path+'/posterior/pos_w/'+'chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name,pos_w )
+        #file_name = self.path+'/posterior/pos_w/'+'chain_'+ str(self.temperature)+ '.txt'
+        #np.savetxt(file_name,pos_w )
 
-        # file_name = self.path+'/predictions/fxtrain_samples_chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name, fxtrain_samples, fmt='%1.2f')
-        # file_name = self.path+'/predictions/fxtest_samples_chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name, fxtest_samples, fmt='%1.2f')
-        # file_name = self.path+'/predictions/rmse_test_chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name, rmse_test, fmt='%1.2f')
-        # file_name = self.path+'/predictions/rmse_train_chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name, rmse_train, fmt='%1.2f')
+        #file_name = self.path+'/predictions/fxtrain_samples_chain_'+ str(self.temperature)+ '.txt'
+        #np.savetxt(file_name, fxtrain_samples, fmt='%1.2f')
 
-        # file_name = self.path+'/predictions/acc_test_chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name, acc_test, fmt='%1.2f')
-        # file_name = self.path+'/predictions/acc_train_chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name, acc_train, fmt='%1.2f')
+        #file_name = self.path+'/predictions/fxtest_samples_chain_'+ str(self.temperature)+ '.txt'
+        #np.savetxt(file_name, fxtest_samples, fmt='%1.2f')
 
-        # file_name = self.path+'/posterior/pos_likelihood/chain_'+ str(self.temperature)+ '.txt'
-        # np.savetxt(file_name,likeh_list, fmt='%1.4f')
+        file_name = self.path+'/predictions/rmse_test_chain_'+ str(self.temperature)+ '.txt'
+        np.savetxt(file_name, rmse_test, fmt='%1.2f')
 
-        # file_name = self.path + '/posterior/accept_list/chain_' + str(self.temperature) + '_accept.txt'
-        # np.savetxt(file_name, [accept_ratio], fmt='%1.4f')
+        file_name = self.path+'/predictions/rmse_train_chain_'+ str(self.temperature)+ '.txt'
+        np.savetxt(file_name, rmse_train, fmt='%1.2f')
 
-        # file_name = self.path + '/posterior/accept_list/chain_' + str(self.temperature) + '.txt'
-        # np.savetxt(file_name, accept_list, fmt='%1.4f')
+        file_name = self.path+'/predictions/acc_test_chain_'+ str(self.temperature)+ '.txt'
+        np.savetxt(file_name, acc_test, fmt='%1.2f')
 
-        self.signal_main.set()
+        file_name = self.path+'/predictions/acc_train_chain_'+ str(self.temperature)+ '.txt'
+        np.savetxt(file_name, acc_train, fmt='%1.2f')
+
+        #file_name = self.path+'/posterior/pos_likelihood/chain_'+ str(self.temperature)+ '.txt'
+        #np.savetxt(file_name,likeh_list, fmt='%1.4f')
+
+        #file_name = self.path + '/posterior/accept_list/chain_' + str(self.temperature) + '_accept.txt'
+        #np.savetxt(file_name, [accept_ratio], fmt='%1.4f')
+
+        #file_name = self.path + '/posterior/accept_list/chain_' + str(self.temperature) + '.txt'
+        #np.savetxt(file_name, accept_list, fmt='%1.4f')
+
 
 
 class ParallelTempering:
@@ -733,7 +746,6 @@ class ParallelTempering:
         if ntemps is not None and (type(ntemps) != int or ntemps < 1):
             raise ValueError('Invalid number of temperatures specified.')
 
-        '''
         tstep = np.array([25.2741, 7., 4.47502, 3.5236, 3.0232,
                         2.71225, 2.49879, 2.34226, 2.22198, 2.12628,
                         2.04807, 1.98276, 1.92728, 1.87946, 1.83774,
@@ -755,23 +767,6 @@ class ParallelTempering:
                         1.27397, 1.27227, 1.27061, 1.26898, 1.26737,
                         1.26579, 1.26424, 1.26271, 1.26121,
                         1.25973])
-        '''
-
-        '''
-
-        trying new stuff ashray
-
-        '''
-
-        maxtemp = self.maxtemp
-        numchain = self.num_chains
-        b = []
-        b.append(maxtemp)
-        last = maxtemp
-        for i in range(maxtemp):
-            last = last * (numchain ** (-1 / (numchain - 1)))
-            b.append(last)
-        tstep = np.array(b)
 
         if ndim > tstep.shape[0]:
             # An approximation to the temperature step at large
@@ -888,22 +883,24 @@ class ParallelTempering:
             self.chains[l].start_chain = start
             self.chains[l].end = end
         for j in range(0, self.num_chains):
+            self.wait_chain[j].clear()
+            self.event[j].clear()
             self.chains[j].start()
-
         # SWAP PROCEDURE
         swaps_affected_main = 0
         total_swaps = 0
         for i in range(int(self.NumSamples / self.swap_interval)):
-            # print(i,int(numsamp/self.swap_interval), ' count')
+            print(i,int(self.NumSamples/self.swap_interval), 'Counting')
             count = 0
             for index in range(self.num_chains):
                 if not self.chains[index].is_alive():
                     count += 1
-                    print(str(self.chains[index].temperature) + " Dead" + str(index))
+                    self.wait_chain[index].set()
+                    #print(str(self.chains[index].temperature) + " Dead" + str(index))
 
             if count == self.num_chains:
                 break
-            print("Waiting")
+            #print(count,'Is the Count')
             timeout_count = 0
             for index in range(0, self.num_chains):
                 # print("Waiting for chain: {}".format(index+1))
@@ -913,11 +910,11 @@ class ParallelTempering:
                     timeout_count += 1
 
             if timeout_count != self.num_chains:
-                print("Skipping the swap!")
+                #print("Skipping the Swap!")
                 continue
-            print("Event occured")
+            #print("Event Occured")
             for index in range(0, self.num_chains - 1):
-                print('starting swap')
+                #print('Starting Swap')
                 swapped = False
                 param_1, param_2, swapped = self.swap_procedure(self.parameter_queue[index],
                                                                 self.parameter_queue[index + 1])
@@ -928,45 +925,54 @@ class ParallelTempering:
                         swaps_affected_main += 1
                     total_swaps += 1
             for index in range(self.num_chains):
-                self.event[index].set()
                 self.wait_chain[index].clear()
+                self.event[index].set()
 
-        print("Joining processes")
+        print("Joining Processes")
 
         # JOIN THEM TO MAIN PROCESS
         for index in range(0, self.num_chains):
+            print('Waiting to Join ',index,self.num_chains)
+            print(self.chains[index].is_alive())
             self.chains[index].join()
+            print(index, 'Chain Joined')
         self.chain_queue.join()
-        pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, accept_vec, accept = self.show_results()
-        print("NUMBER OF SWAPS =", self.num_swap)
+        #pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, accept_vec, accept = self.show_results()
+        rmse_train, rmse_test, acc_train, acc_test = self.show_results()
+        print("NUMBER OF SWAPS = ", self.num_swap)
         swap_perc = self.num_swap * 100 / self.total_swap_proposals
-        return pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, swap_perc, accept_vec, accept
+        #return pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, swap_perc, accept_vec, accept
+        return rmse_train, rmse_test, acc_train, acc_test
 
     def show_results(self):
         burnin = int(self.NumSamples * self.burn_in)
         mcmc_samples = int(self.NumSamples * 0.25)
-        likelihood_rep = np.zeros((self.num_chains, self.NumSamples - burnin,
-                                   2))  # index 1 for likelihood posterior and index 0 for Likelihood proposals. Note all likilihood proposals plotted only
-        accept_percent = np.zeros((self.num_chains, 1))
-        accept_list = np.zeros((self.num_chains, self.NumSamples))
-        pos_w = np.zeros((self.num_chains, self.NumSamples - burnin, self.num_param))
-        fx_train_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.traindata)))
+        #likelihood_rep = np.zeros((self.num_chains, self.NumSamples - burnin,2))  # index 1 for likelihood posterior and index 0 for Likelihood proposals. Note all likilihood proposals plotted only
+        #accept_percent = np.zeros((self.num_chains, 1))
+        #accept_list = np.zeros((self.num_chains, self.NumSamples))
+        #pos_w = np.zeros((self.num_chains, self.NumSamples - burnin, self.num_param))
+        #fx_train_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.traindata)))
         rmse_train = np.zeros((self.num_chains, self.NumSamples - burnin))
         acc_train = np.zeros((self.num_chains, self.NumSamples - burnin))
-        fx_test_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.testdata)))
+        #fx_test_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.testdata)))
         rmse_test = np.zeros((self.num_chains, self.NumSamples - burnin))
         acc_test = np.zeros((self.num_chains, self.NumSamples - burnin))
 
         for i in range(self.num_chains):
-            file_name = self.path + '/posterior/pos_w/' + 'chain_' + str(self.temperatures[i]) + '.txt'
-            dat = np.loadtxt(file_name)
-            pos_w[i, :, :] = dat[burnin:, :]
-            file_name = self.path + '/posterior/pos_likelihood/' + 'chain_' + str(self.temperatures[i]) + '.txt'
-            dat = np.loadtxt(file_name)
-            likelihood_rep[i, :] = dat[burnin:]
-            file_name = self.path + '/posterior/accept_list/' + 'chain_' + str(self.temperatures[i]) + '.txt'
-            dat = np.loadtxt(file_name)
-            accept_list[i, :] = dat
+
+            #file_name = self.path + '/posterior/pos_w/' + 'chain_' + str(self.temperatures[i]) + '.txt'
+            #print(self.path)
+            #print(file_name)
+            #dat = np.loadtxt(file_name)
+            #pos_w[i, :, :] = dat[burnin:, :]
+
+            #file_name = self.path + '/posterior/pos_likelihood/' + 'chain_' + str(self.temperatures[i]) + '.txt'
+            #dat = np.loadtxt(file_name)
+            #likelihood_rep[i, :] = dat[burnin:]
+
+            #file_name = self.path + '/posterior/accept_list/' + 'chain_' + str(self.temperatures[i]) + '.txt'
+            #dat = np.loadtxt(file_name)
+            #accept_list[i, :] = dat
 
             file_name = self.path + '/predictions/rmse_test_chain_' + str(self.temperatures[i]) + '.txt'
             dat = np.loadtxt(file_name)
@@ -990,14 +996,14 @@ class ParallelTempering:
         chain1_acctest = acc_test[0, :]
         chain1_acctrain = acc_train[0, :]
 
-        posterior = pos_w.transpose(2, 0, 1).reshape(self.num_param, -1)
+        #posterior = pos_w.transpose(2, 0, 1).reshape(self.num_param, -1)
 
         # fx_train = fx_train_all.transpose(2,0,1).reshape(self.traindata.shape[0],-1)  # need to comment this if need to save memory
         # fx_test = fx_test_all.transpose(2,0,1).reshape(self.testdata.shape[0],-1)
 
         # fx_test = fxtest_samples.reshape(self.num_chains*(self.NumSamples - burnin), self.testdata.shape[0]) # konarks version
 
-        likelihood_vec = likelihood_rep.transpose(2, 0, 1).reshape(2, -1)
+        #likelihood_vec = likelihood_rep.transpose(2, 0, 1).reshape(2, -1)
 
         '''rmse_train = rmse_train[  : , 0: mcmc_samples]
         rmse_test = rmse_test[  : , 0: mcmc_samples]
@@ -1020,19 +1026,20 @@ class ParallelTempering:
         acc_train = np.append(acc_train, chain1_acctrain)
         acc_test = np.append(acc_test, chain1_acctest) '''
 
-        accept_vec = accept_list
+        #accept_vec = accept_list
 
-        accept = np.sum(accept_percent) / self.num_chains
+        #accept = np.sum(accept_percent) / self.num_chains
 
         # np.savetxt(self.path + '/pos_param.txt', posterior.T)  # tcoment to save space
 
-        np.savetxt(self.path + '/likelihood.txt', likelihood_vec.T, fmt='%1.5f')
+        #np.savetxt(self.path + '/likelihood.txt', likelihood_vec.T, fmt='%1.5f')
 
-        np.savetxt(self.path + '/accept_list.txt', accept_list, fmt='%1.2f')
+        #np.savetxt(self.path + '/accept_list.txt', accept_list, fmt='%1.2f')
 
-        np.savetxt(self.path + '/acceptpercent.txt', [accept], fmt='%1.2f')
+        #np.savetxt(self.path + '/acceptpercent.txt', [accept], fmt='%1.2f')
 
-        return posterior, fx_train_all, fx_test_all, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec.T, accept_vec, accept
+        #return posterior, fx_train_all, fx_test_all, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec.T, accept_vec, accept
+        return rmse_train, rmse_test, acc_train, acc_test
 
     def make_directory(self, directory):
         if not os.path.exists(directory):
@@ -1061,16 +1068,19 @@ def main():
         burn_in = args.burn_in
         # learn_rate = 0.01  # in case langevin gradients are used. Can select other values, we found small value is ok.
         use_langevin_gradients = True  # False leaves it as Random-walk proposals. Note that Langevin gradients will take a bit more time computationally
-        problemfolder = 'mnist_torch/' + net1 + '/PT_EvalSwapRW/'  # change this to your directory for results output - produces large datasets
-        problemfolder_db = 'mnist_torch/' + net1 + '/PT_EvalSwapRW/'  # save main results
+        problemfolder = 'mnist_torch/' + net1  # change this to your directory for results output - produces large datasets
+        problemfolder_db = 'mnist_torch/' + net1   # save main results
         name = ""
         filename = ""
         run_nb = 0
         while os.path.exists(problemfolder + name + '_%s' % (run_nb)):
             run_nb += 1
+        print(run_nb)
+
         if not os.path.exists(problemfolder + name + '_%s' % (run_nb)):
             os.makedirs(problemfolder + name + '_%s' % (run_nb))
             path = (problemfolder + name + '_%s' % (run_nb))
+
         filename = ""
         run_nb = 0
         while os.path.exists(problemfolder_db + name + '_%s' % (run_nb)):
@@ -1088,7 +1098,20 @@ def main():
         for d in directories:
             pt.make_directory((filename) + d)
         pt.initialize_chains(burn_in)
-        pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_rep, swap_perc, accept_vec, accept = pt.run_chains()
+        #pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_rep, swap_perc, accept_vec, accept = pt.run_chains()
+        rmse_train, rmse_test, acc_train, acc_test = pt.run_chains()
+        print("\n\n\n\n\n\n\n\n")
+        print("Mean of RMSE Train")
+        print(np.mean(rmse_train))
+        print("\n")
+        print("Mean of Accuracy Train")
+        print(np.mean(acc_train))
+        print("\n")
+        print("Mean of RMSE Test")
+        print(np.mean(rmse_test))
+        print("\n")
+        print("Mean of Accuracy Test")
+        print(np.mean(acc_test))
         timer2 = time.time()
         # list_end = accept_vec.shape[1]
         # accept_ratio = accept_vec[:,  list_end-1:list_end]/list_end
