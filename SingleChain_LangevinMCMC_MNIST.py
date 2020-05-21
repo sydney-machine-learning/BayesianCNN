@@ -26,7 +26,7 @@ import math
 import copy
 import os
 import matplotlib.pyplot as plt
-# np.random.seed(1)
+
 
 input_size = 320
 hidden_size = 50
@@ -43,7 +43,7 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 50
+        size = 200
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
@@ -86,7 +86,7 @@ class Model(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, 5, 1)
         self.fc1 = nn.Linear(1024, 10)
         self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc2 = nn.Linear(128, 10)
+        #self.fc2 = nn.Linear(128, 10)
 
         self.batch_size = batch_size
         self.sigmoid = nn.Sigmoid()
@@ -270,6 +270,10 @@ class MCMC:
         likelihood_proposal_array = np.zeros(samples)
         likelihood_array=np.zeros(samples)
         diff_likelihood_array=np.zeros(samples)
+        weight_array=np.zeros(samples)
+        weight_array1=np.zeros(samples)
+        weight_array2=np.zeros(samples)
+        sum_value_array=np.zeros(samples)
 
 
         eta = 0
@@ -311,7 +315,13 @@ class MCMC:
         likelihood_proposal_array[0]=0
         likelihood_array[0]=0
         diff_likelihood_array[0]=0
+        weight_array[0]=0
+        weight_array1[0] = 0
+        weight_array2[0] = 0
+        sum_value_array[0]=0
 
+        #pytorch_total_params = sum(p.numel() for p in rnn.parameters() if p.requires_grad)
+        #print(pytorch_total_params)
         # acc_train[0] = 50.0
         # acc_test[0] = 50.0
 
@@ -353,6 +363,8 @@ class MCMC:
             likelihood_array[i] = likelihood
             diff_likelihood_array[i] = diff_likelihood
 
+
+
             #print("\n\n")
             #print("Likelihood Proposal")
             #print(likelihood_proposal)
@@ -380,17 +392,29 @@ class MCMC:
             #print(diff_likelihood + diff_prior + diff_prop)
             #print("\n\n")
             #+ diff_prior + diff_prop
-            try:
-                mh_prob = min(1, math.exp(diff_likelihood))
-            except OverflowError as e:
-                mh_prob = 1
-            u = random.uniform(0, 1)
 
+            #try:
+            #    mh_prob = min(1, math.exp(diff_likelihood))
+            #except OverflowError as e:
+            #    mh_prob = 1
+
+            sum_value=diff_likelihood + diff_prior + diff_prop
+            u = np.log(random.uniform(0, 1))
+
+            sum_value_array[i]=sum_value
+
+            #print("Sum_Value")
+            #print(sum_value)
+            #print("\n\n")
+
+            #print("U")
+            #print(u)
+            #print("\n\n")
             #print("MH_Prob")
             #print(mh_prob)
             #print("\n\n")
 
-            if u < mh_prob:
+            if u < sum_value:
                 num_accepted = num_accepted + 1
                 likelihood = likelihood_proposal
                 prior_current = prior_prop
@@ -409,21 +433,27 @@ class MCMC:
                 acc_train1 = self.accuracy(train)
                 acc_test1 = self.accuracy(test)
                 print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'rejected')
-                rmse_train[i] = rmsetrain
-                rmse_test[i] = rmsetest
-                acc_train[i,] = acc_train1
-                acc_test[i,] = acc_test1
-                #rmse_train[i,] = rmse_train[i - 1,]
-                #rmse_test[i,] = rmse_test[i - 1,]
-                #acc_train[i,] = acc_train[i - 1,]
-                #acc_test[i,] = acc_test[i - 1,]
+                #rmse_train[i] = rmsetrain
+                #rmse_test[i] = rmsetest
+                #acc_train[i,] = acc_train1
+                #acc_test[i,] = acc_test1
+                rmse_train[i,] = rmse_train[i - 1,]
+                rmse_test[i,] = rmse_test[i - 1,]
+                acc_train[i,] = acc_train[i - 1,]
+                acc_test[i,] = acc_test[i - 1,]
+
+            ll=rnn.getparameters()
+            #print(ll[0])
+            weight_array[i]=ll[0]
+            weight_array1[i] = ll[100]
+            weight_array2[i] = ll[50000]
 
 
         print ((num_accepted * 100 / (samples * 1.0)), '% was Accepted')
 
         print ((langevin_count * 100 / (samples * 1.0)), '% was Langevin')
 
-        return acc_train, acc_test, rmse_train, rmse_test, likelihood_proposal_array
+        return acc_train, acc_test, rmse_train, rmse_test, sum_value_array, weight_array, weight_array1, weight_array2
 
 
 
@@ -432,15 +462,22 @@ def main():
 
     topology = [input_size, hidden_size, num_classes]
 
-    numSamples = 200
+    numSamples = 1000
     ulg = True
 
     learnr=0.01
+    burnin =0.25
 
 
     mcmc = MCMC(numSamples, topology, ulg, learnr, batch_size)  # declare class
-    acc_train, acc_test, rmse_train, rmse_test, lpa = mcmc.sampler()
+    acc_train, acc_test, rmse_train, rmse_test, sva, wa, wa1, wa2 = mcmc.sampler()
 
+    acc_train=acc_train[int(numSamples*burnin):]
+    #print(acc_train)
+    acc_test=acc_test[int(numSamples*burnin):]
+    rmse_train=rmse_train[int(numSamples*burnin):]
+    rmse_test=rmse_test[int(numSamples*burnin):]
+    sva=sva[int(numSamples*burnin):]
     #print(lpa)
 
     print("\n\n\n\n\n\n\n\n")
@@ -461,39 +498,93 @@ def main():
     os.makedirs(problemfolder)
 
 
-    x = np.linspace(0, numSamples, num=numSamples)
+    x = np.linspace(0, int(numSamples-numSamples*burnin), num=int(numSamples-numSamples*burnin))
+    x1 = np.linspace(0, numSamples, num=numSamples)
 
-    plt.plot(x, lpa, label='Likelihood_Proposal')
+    plt.plot(x1, wa, label='Weight[0]')
     plt.legend(loc='upper right')
-    plt.title("Likelihood Values Over Samples")
-    plt.savefig('mnist_torch_single_chain'+'/likelihood__proposal_samples.png')
+    plt.title("Weight[0] Trace")
+    plt.savefig('mnist_torch_single_chain' + '/weight[0]_samples.png')
+    plt.clf()
+
+    plt.plot(x1, wa1, label='Weight[100]')
+    plt.legend(loc='upper right')
+    plt.title("Weight[100] Trace")
+    plt.savefig('mnist_torch_single_chain' + '/weight[100]_samples.png')
+    plt.clf()
+
+    plt.plot(x1,wa2, label='Weight[50000]')
+    plt.legend(loc='upper right')
+    plt.title("Weight[50000] Trace")
+    plt.savefig('mnist_torch_single_chain' + '/weight[50000]_samples.png')
+    plt.clf()
+
+    plt.plot(x, sva, label='Sum_Value')
+    plt.legend(loc='upper right')
+    plt.title("Sum Value Over Samples")
+    plt.savefig('mnist_torch_single_chain'+'/sum_value_samples.png')
     plt.clf()
 
 
-    plt.plot(x, acc_train, label='Train')
-    plt.legend(loc='upper right')
-    plt.title("Accuracy Values Over Samples")
-    plt.savefig('mnist_torch_single_chain' + '/accuracy_samples.png')
-    plt.clf()
+    #plt.plot(x, acc_train, label='Train')
+    #plt.legend(loc='upper right')
+    #plt.title("Accuracy Train Values Over Samples")
+    #plt.savefig('mnist_torch_single_chain' + '/accuracy_samples.png')
+    #plt.clf()
 
     fig, ax1 = plt.subplots()
 
     color = 'tab:red'
     ax1.set_xlabel('Samples')
-    ax1.set_ylabel('Likelihood', color=color)
-    ax1.plot(x, lpa, color=color)
+    ax1.set_ylabel('Accuracy Train', color=color)
+    ax1.plot(x, acc_train, color=color)
     ax1.tick_params(axis='y', labelcolor=color)
 
     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
 
     color = 'tab:blue'
-    ax2.set_ylabel('Accuracy Train', color=color)  # we already handled the x-label with ax1
-    ax2.plot(x, acc_train, color=color)
+    ax2.set_ylabel('Accuracy Test', color=color)  # we already handled the x-label with ax1
+    ax2.plot(x, acc_test, color=color)
     ax2.tick_params(axis='y', labelcolor=color)
 
+    #ax3=ax1.twinx()
+
+    #color = 'tab:green'
+    #ax3.set_ylabel('Accuracy Test', color=color)  # we already handled the x-label with ax1
+    #ax3.plot(x, acc_test, color=color)
+    #ax3.tick_params(axis='y', labelcolor=color)
+
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    plt.savefig('mnist_torch_single_chain' + '/superimposed.png')
+    plt.savefig('mnist_torch_single_chain' + '/superimposed_acc.png')
     plt.clf()
+
+    fig1, ax4 = plt.subplots()
+
+    color = 'tab:red'
+    ax4.set_xlabel('Samples')
+    ax4.set_ylabel('RMSE Train', color=color)
+    ax4.plot(x, rmse_train, color=color)
+    ax4.tick_params(axis='y', labelcolor=color)
+
+    ax5 = ax4.twinx()  # instantiate a second axes that shares the same x-axis
+
+    color = 'tab:blue'
+    ax5.set_ylabel('RMSE Test', color=color)  # we already handled the x-label with ax1
+    ax5.plot(x, rmse_test, color=color)
+    ax5.tick_params(axis='y', labelcolor=color)
+
+    #ax6 = ax4.twinx()
+
+    #color = 'tab:green'
+    #ax6.set_ylabel('RMSE Test', color=color)  # we already handled the x-label with ax1
+    #ax6.plot(x, rmse_test, color=color)
+    #ax6.tick_params(axis='y', labelcolor=color)
+
+    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    plt.savefig('mnist_torch_single_chain' + '/superimposed_rmse.png')
+    plt.clf()
+
+
 
 
 if __name__ == "__main__": main()
