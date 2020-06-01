@@ -27,15 +27,15 @@ torch.backends.cudnn.enabled = False
 device = 'cpu'
 
 # Hyper-parameters
-sequence_length = 28
-input_size = 320
-hidden_size = 50
-num_layers = 2
+
+input_size = 320 # Junk
+hidden_size = 50 # Junk
+num_layers = 2 # Junk
+
 num_classes = 10    
-batch_size = 10
-num_epochs = 2
-learning_rate = 0.01
-weightdecay = 0.01
+batch_size = 50
+
+
 batch_Size = batch_size
 
 
@@ -71,13 +71,13 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 20
+        size = 1000
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
         samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True, transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                      torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
-        size = 200
+        size = 2000
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     data_loader = torch.utils.data.DataLoader(a,
@@ -92,19 +92,21 @@ def data_load(data='train'):
 parser = argparse.ArgumentParser(description='PT MCMC CNN')
 
 parser.add_argument('-n', '--net', help='Choose rnn net, "1" for RNN, "2" for GRU, "3" for LSTM', default=4, dest="net",
-                    type=int)
-parser.add_argument('-s', '--samples', help='Number of samples', default=200, dest="samples", type=int)
+                    type=int) # Junk
+parser.add_argument('-s', '--samples', help='Number of samples', default=500, dest="samples", type=int)
 parser.add_argument('-r', '--replicas', help='Number of chains/replicas, best to have one per availble core/cpu',
-                    default=4, dest="num_chains", type=int)
+                    default=10, dest="num_chains", type=int)
 parser.add_argument('-t', '--temperature', help='Demoninator to determine Max Temperature of chains (MT=no.chains*t) ',
-                    default=2, dest="mt_val", type=int)
+                    default=2, dest="mt_val", type=int) #Junk
 parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.02, type=float)
 parser.add_argument('-b', '--burn', help='How many samples to discard before determing posteriors', dest="burn_in",
                     default=0.25, type=float)
 parser.add_argument('-pt', '--ptsamples', help='Ratio of PT vs straight MCMC samples to run', dest="pt_samples",
                     default=0.5, type=float)
 parser.add_argument('-step', '--step', help='Step size for proposals (0.02, 0.05, 0.1 etc)', dest="step_size",
-                    default=0.05, type=float)
+                    default=0.005, type=float) # Junk
+parser.add_argument('-lr', '--learning_rate', help='Learning Rate for Model', dest="learning_rate",
+                    default=0.01, type=float)
 args = parser.parse_args()
 
 
@@ -342,7 +344,7 @@ class ptReplica(multiprocessing.Process):
         w_proposal = rnn.dictfromlist(w_proposal)
 
         # Randomwalk Steps
-        step_w = 0.001
+        step_w = 0.005
 
         # Declare FNN
 
@@ -416,6 +418,7 @@ class ptReplica(multiprocessing.Process):
 
         # print('i and samples')
         for i in range(samples):  # Begin sampling --------------------------------------------------------------------------
+
             ratio = ((samples - i) / (samples * 1.0))
             if i < pt_samples:
                 self.adapttemp = self.temperature  # * ratio  #  T1=T/log(k+1);
@@ -1077,28 +1080,26 @@ def main():
 
     topology = [input_size, hidden_size, num_classes]
 
+    net1 = 'CNN'
     numSamples = args.samples
     batch_size = batch_Size
-
-    #networks = ['RNN', 'GRU', 'LSTM', 'CNN']#networks[args.net - 1]
-    net1 = 'CNN'
-
-
-
-    maxtemp = 2
     num_chains = args.num_chains
-    swap_ratio = args.swap_ratio  # float(sys.argv[1])
-    swap_interval = int(swap_ratio * numSamples / num_chains)  # int(swap_ratio * (NumSample/num_chains)) #how ofen you swap neighbours. note if swap is more than Num_samples, its off
+    swap_ratio = args.swap_ratio
     burn_in = args.burn_in
-    bi=burn_in
-    # learn_rate = 0.01  # in case langevin gradients are used. Can select other values, we found small value is ok.
+    learning_rate = args.learning_rate
+    maxtemp = 2
     use_langevin_gradients = True  # False leaves it as Random-walk proposals. Note that Langevin gradients will take a bit more time computationally
+    bi = burn_in
+    swap_interval = int(swap_ratio * numSamples / num_chains)  # int(swap_ratio * (NumSample/num_chains)) #how ofen you swap neighbours. note if swap is more than Num_samples, its off
+
+
+
+    # learn_rate = 0.01  # in case langevin gradients are used. Can select other values, we found small value is ok.
 
 
     problemfolder = 'mnist_torch/' + net1  # change this to your directory for results output - produces large datasets
+
     name = ""
-
-
     filename = ""
 
 
@@ -1133,7 +1134,7 @@ def main():
     print ((timetotal), 'is the minutes taken')
 
 
-
+    """
     # #PLOTS
     acc_tr = np.mean(acc_train [:])
     acctr_std = np.std(acc_train[:])
@@ -1150,6 +1151,25 @@ def main():
     rmse_tes = np.mean(rmse_test[:])
     rmsetest_std = np.std(rmse_test[:])
     rmsetes_max = np.amax(rmse_test[:])
+    """
+
+    burnin=burn_in
+
+    acc_tr = np.mean(acc_train[int(numSamples * burnin):])
+    acctr_std = np.std(acc_train[int(numSamples * burnin):])
+    acctr_max = np.amax(acc_train[int(numSamples * burnin):])
+
+    acc_tes = np.mean(acc_test[int(numSamples * burnin):])
+    acctest_std = np.std(acc_test[int(numSamples * burnin):])
+    acctes_max = np.amax(acc_test[int(numSamples * burnin):])
+
+    rmse_tr = np.mean(rmse_train[int(numSamples * burnin):])
+    rmsetr_std = np.std(rmse_train[int(numSamples * burnin):])
+    rmsetr_max = np.amax(acc_train[int(numSamples * burnin):])
+
+    rmse_tes = np.mean(rmse_test[int(numSamples * burnin):])
+    rmsetest_std = np.std(rmse_test[int(numSamples * burnin):])
+    rmsetes_max = np.amax(rmse_test[int(numSamples * burnin):])
 
     # outres = open(path+'/result.txt', "a+")
     # outres_db = open(path_db+'/result.txt', "a+")
