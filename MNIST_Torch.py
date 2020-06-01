@@ -32,7 +32,7 @@ input_size = 320 # Junk
 hidden_size = 50 # Junk
 num_layers = 2 # Junk
 
-num_classes = 10    
+num_classes = 10
 batch_size = 50
 
 
@@ -71,13 +71,13 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 1000
+        size = 250
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
         samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True, transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                      torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
-        size = 2000
+        size = 500
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     data_loader = torch.utils.data.DataLoader(a,
@@ -1105,7 +1105,7 @@ def main():
 
     if not os.path.exists(problemfolder + name):
         os.makedirs(problemfolder + name)
-        path = (problemfolder + name)
+    path = (problemfolder + name)
 
 
     timer = time.time()
@@ -1113,7 +1113,7 @@ def main():
     pt = ParallelTempering(use_langevin_gradients, learning_rate, topology, num_chains, maxtemp, numSamples,
                            swap_interval, path, batch_size, bi, rnn_net=net1)
 
-    directories = [path + '/predictions/', path+'/graphs']
+    directories = [path + '/predictions/', path+'/graphs/']
     for d in directories:
         pt.make_directory((filename) + d)
 
