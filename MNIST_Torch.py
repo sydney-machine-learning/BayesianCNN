@@ -1165,7 +1165,7 @@ def main():
 
     rmse_tr = np.mean(rmse_train[int(numSamples * burnin):])
     rmsetr_std = np.std(rmse_train[int(numSamples * burnin):])
-    rmsetr_max = np.amax(acc_train[int(numSamples * burnin):])
+    rmsetr_max = np.amax(rmse_train[int(numSamples * burnin):])
 
     rmse_tes = np.mean(rmse_test[int(numSamples * burnin):])
     rmsetest_std = np.std(rmse_test[int(numSamples * burnin):])
