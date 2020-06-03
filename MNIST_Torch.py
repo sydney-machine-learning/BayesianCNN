@@ -26,46 +26,26 @@ mpl.use('agg')
 torch.backends.cudnn.enabled = False
 device = 'cpu'
 
-# Hyper-parameters
+
+
+
+
+# Hyper-Parameters
 
 input_size = 320 # Junk
 hidden_size = 50 # Junk
 num_layers = 2 # Junk
-
 num_classes = 10
 batch_size = 50
-
-
 batch_Size = batch_size
 
 
 
-# MNIST dataset
-train_dataset = torchvision.datasets.MNIST(root='../../data/',
-                                           train=True,
-                                           transform=transforms.ToTensor(),
-                                           download=True)
-
-test_dataset = torchvision.datasets.MNIST(root='../../data/',
-                                          train=False,
-                                          transform=transforms.ToTensor())
-
-# Data loader
-train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                           batch_size=batch_size,
-                                           shuffle=True)
-
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                          batch_size=batch_size,
-                                          shuffle=False)
 
 
-
+# Loading the MNIST data from torchvision
 
 def data_load(data='train'):
-    # trainsize = 200
-    # testsize = 40
-
     if data == 'test':
         samples = torchvision.datasets.MNIST(root='./mnist', train=False, download=True,
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
@@ -88,37 +68,41 @@ def data_load(data='train'):
 
 
 
-# Initialise and parse inputs
-parser = argparse.ArgumentParser(description='PT MCMC CNN')
 
-parser.add_argument('-n', '--net', help='Choose rnn net, "1" for RNN, "2" for GRU, "3" for LSTM', default=4, dest="net",
-                    type=int) # Junk
+# Initialise and parse command-line inputs
+
+parser = argparse.ArgumentParser(description='PT MCMC CNN')
 parser.add_argument('-s', '--samples', help='Number of samples', default=500, dest="samples", type=int)
 parser.add_argument('-r', '--replicas', help='Number of chains/replicas, best to have one per availble core/cpu',
                     default=10, dest="num_chains", type=int)
-parser.add_argument('-t', '--temperature', help='Demoninator to determine Max Temperature of chains (MT=no.chains*t) ',
-                    default=2, dest="mt_val", type=int) #Junk
-parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.02, type=float)
-parser.add_argument('-b', '--burn', help='How many samples to discard before determing posteriors', dest="burn_in",
-                    default=0.25, type=float)
-parser.add_argument('-pt', '--ptsamples', help='Ratio of PT vs straight MCMC samples to run', dest="pt_samples",
-                    default=0.5, type=float)
-parser.add_argument('-step', '--step', help='Step size for proposals (0.02, 0.05, 0.1 etc)', dest="step_size",
-                    default=0.005, type=float) # Junk
 parser.add_argument('-lr', '--learning_rate', help='Learning Rate for Model', dest="learning_rate",
                     default=0.01, type=float)
+parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.02, type=float)
+parser.add_argument('-b', '--burn', help='How many samples to discard before determing posteriors', dest="burn_in",
+                    default=0.50, type=float)
+parser.add_argument('-pt', '--ptsamples', help='Ratio of PT vs straight MCMC samples to run', dest="pt_samples",
+                    default=0.5, type=float)
+parser.add_argument('-step', '--step_size', help='Step size for proposals (0.02, 0.05, 0.1 etc)', dest="step_size",
+                    default=0.005, type=float) # Junk
+parser.add_argument('-t', '--temperature', help='Demoninator to determine Max Temperature of chains (MT=no.chains*t) ',
+                    default=2, dest="mt_val", type=int) #Junk
+parser.add_argument('-n', '--net', help='Choose rnn net, "1" for RNN, "2" for GRU, "3" for LSTM', default=4, dest="net",
+                    type=int) # Junk
 args = parser.parse_args()
 
 
 def f(): raise Exception("Found exit()")
 
 
+
+
+
+# CNN model defined using pytorch
+
 class Model(nn.Module):
-    # Defining input size, hidden layer size, output size and batch size respectively
     def __init__(self, topo, lrate, batch_size, rnn_net='CNN'):
         super(Model, self).__init__()
         if rnn_net == 'CNN':
-            #print("CNN")
             self.conv1 = nn.Conv2d(1, 32, 5, 1)
             self.conv2 = nn.Conv2d(32, 64, 5, 1)
             self.fc1 = nn.Linear(1024, 10)
@@ -131,27 +115,19 @@ class Model(nn.Module):
             self.criterion = torch.nn.CrossEntropyLoss()
             self.optimizer = torch.optim.Adam(self.parameters(), lr=lrate)
 
+    # Sequence of execution for the model layers
 
     def forward(self, x):
         x = self.conv1(x)
-        # print("def")
         x = F.max_pool2d(x, 2)
-        # x = F.relu(x)
-        # x = nn.Dropout2d(x)
         x = self.conv2(x)
         x = F.max_pool2d(x, 2)
-        # x = F.relu(x)
         x = torch.flatten(x, 1)
         x = F.relu(x)
-        # print("X Shape")
-        # print(x.shape)
         x = self.fc1(x)
-        # x = nn.Sigmoid(x)
-        # x=F.relu(x)
-        # x = self.fc2(x)
-        # x = F.relu(x)
         return x
 
+    # Used to apply softmax and obtain loss value
 
     def evaluate_proposal(self, data, w=None):
         self.los = 0
@@ -170,12 +146,12 @@ class Model(nn.Module):
             self.los += loss
         return y_pred, prob
 
+    # Applied langevin gradient to obtain weight proposal
+
     def langevin_gradient(self, x, w=None):
         if w is not None:
             self.loadparameters(w)
-        # only one epoch
         self.los = 0
-        # print(self.state_dict()['fc.weight'][0])
         for i, sample in enumerate(x, 0):
             inputs, labels = sample
             outputs = self.forward(inputs)
@@ -187,11 +163,10 @@ class Model(nn.Module):
             # if (i % 50 == 0):
             # print(loss.item(), ' is loss', i)
             self.los += copy.deepcopy(loss.item())
-        # print(lo,' is loss')
         return copy.deepcopy(self.state_dict())
 
-    # returns a np arraylist of weights and biases -- layerwise
-    # in order i.e. weight and bias of input and hidden then weight and bias for hidden to out
+    # Obtain a list of the model parameters (weights and biases)
+
     def getparameters(self, w=None):
         l = np.array([1, 2])
         dic = {}
@@ -204,9 +179,12 @@ class Model(nn.Module):
         l = l[2:]
         return l
 
-    # input a dictionary of same dimensions
+    # Loads the model parameters
+
     def loadparameters(self, param):
         self.load_state_dict(param)
+
+    # Converting list of model parameters to pytorch dictionary form
 
     def dictfromlist(self, param):
         dic = {}
@@ -215,10 +193,10 @@ class Model(nn.Module):
             dic[name] = torch.FloatTensor(param[i:i + (self.state_dict()[name]).view(-1).shape[0]]).view(
                 self.state_dict()[name].shape)
             i += (self.state_dict()[name]).view(-1).shape[0]
-        # self.loadparameters(dic)
         return dic
 
-    # input weight dictionary, mean, std dev
+    # Adds random noise to weights to create new weight proposal
+
     def addnoiseandcopy(self, mea, std_dev):
         dic = {}
         w = self.state_dict()
@@ -228,12 +206,15 @@ class Model(nn.Module):
         return dic
 
 
-class ptReplica(multiprocessing.Process):
 
+
+
+# Each instance of the class is one parallel chain
+
+class ptReplica(multiprocessing.Process):
     def __init__(self, use_langevin_gradients, learn_rate, w, minlim_param, maxlim_param, samples, traindata, testdata,
                  topology, burn_in, temperature, swap_interval, path, parameter_queue, main_process, event, batch_size,
-                 rnn_net):
-        # MULTIPROCESSING VARIABLES
+                 rnn_net, step_size):
         self.rnn = Model(topology, learn_rate, batch_size, rnn_net=rnn_net)
         multiprocessing.Process.__init__(self)
         self.processID = temperature
@@ -246,7 +227,6 @@ class ptReplica(multiprocessing.Process):
         self.swap_interval = swap_interval
         self.path = path
         self.burn_in = burn_in
-        # FNN CHAIN VARIABLES (MCMC)
         self.samples = samples
         self.topology = topology
         self.traindata = traindata
@@ -257,39 +237,29 @@ class ptReplica(multiprocessing.Process):
         self.minlim_param = minlim_param
         self.maxlim_param = maxlim_param
         self.use_langevin_gradients = use_langevin_gradients
-        self.sgd_depth = 1  # always should be 1
+        self.sgd_depth = 1  # Keep as 1
         self.learn_rate = learn_rate
-        self.l_prob = 0.5  # can be evaluated for diff problems - if data too large keep this low value since the gradients cost comp time
-        # self.rnn = rnn
+        self.l_prob = 0.5  # Ratio of langevin based proposals, higher value leads to more computation time, evaluate for different problems
+        self.step_size=step_size
+    # Returns loss value
 
     def rmse(self, pred, actual):
         return self.rnn.los.item()
-        # return torch.sqrt(torch.mean((pred-actual)**2))
 
-    ''' check accuracy ashray'''
-    ''' what does fxtrain_samples is used for '''
-    '''    def accuracy(self,pred,actual):
-            count = 0
-            for i in range(pred.shape[0]):
-                for j in range(self.batch_size):
-                    if pred[i][j] == actual[i][j]:
-                        count+=1 
-            #print(count,pred.shape[0], 'is accuracy')
-            return 100*(count/pred.reshape(-1).shape[0])
-    '''
+    # Computes the accuracy value for the model run
 
     def accuracy(self, data):
-        # Test the model
         correct = 0
         total = 0
         for images, labels in data:
-            # images = images.reshape(-1, sequence_length, input_size).to(device)
             labels = labels.to(device)
             outputs = self.rnn(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         return 100 * correct / total
+
+    # Calculates likelihood value, change based on problem
 
     def likelihood_func(self, rnn, data, w=None):
         y = torch.zeros((len(data), self.batch_size))
@@ -313,24 +283,29 @@ class ptReplica(multiprocessing.Process):
                             lhood += np.log(prob[i, j, k])
         return [lhood/self.adapttemp, fx, rmse]
 
+    # Calculates prior value, change based on problem
+
     def prior_likelihood(self, sigma_squared, w_list):
         part1 = -1 * ((len(w_list)) / 2) * np.log(sigma_squared)
         part2 = 1 / (2 * sigma_squared) * (sum(np.square(w_list)))
         log_loss = part1 - part2
         return log_loss
 
+    # MCMC sampling function, saving of results to text files
+
     def run(self):
         samples = self.samples
-        batch_save = 10  # batch to append to file
-        rnn = self.rnn  # Model(self.topology,self.learn_rate, rnn_net=self.rnn_net)
+        rnn = self.rnn
+
         # Random Initialisation of weights
         w = rnn.state_dict()
         w_size = len(rnn.getparameters(w))
+        step_w = self.step_size
+
         rmse_train  = np.zeros(samples)
         rmse_test = np.zeros(samples)
         acc_train = np.zeros(samples)
         acc_test = np.zeros(samples)
-
         weight_array = np.zeros(samples)
         weight_array1 = np.zeros(samples)
         weight_array2 = np.zeros(samples)
@@ -342,39 +317,21 @@ class ptReplica(multiprocessing.Process):
 
         w_proposal = np.random.randn(w_size)
         w_proposal = rnn.dictfromlist(w_proposal)
+        train = self.traindata
+        test = self.testdata
 
-        # Randomwalk Steps
-        step_w = 0.005
-
-        # Declare FNN
-
-        train = self.traindata  # data_load(data='train')
-        test = self.testdata  # data_load(data= 'test')
-
-        # print(len(train),len(test),samples)
-        # Evaluate Proposals
-        # localtime = time.time()
-        # pred_train, prob_train = rnn.evaluate_proposal(train)
-        # pred_test, prob_test = rnn.evaluate_proposal(test)
-        # print(time.time() - localtime, ' time for 1 train and test')
-        # Check Variance of Proposal
 
         sigma_squared = 25
-        nu_1 = 0
-        nu_2 = 0
-        # sigma_diagmat = np.zeros((w_size, w_size))  # for Equation 9 in Ref [Chandra_ICONIP2017]
-        # np.fill_diagonal(sigma_diagmat, step_w)
-        delta_likelihood = 0.5  # an arbitrary position
         prior_current = self.prior_likelihood(sigma_squared, rnn.getparameters(w))  # takes care of the gradients
 
-        t1 = time.time()
+
         # Evaluate Likelihoods
         [likelihood, pred_train, rmsetrain] = self.likelihood_func(rnn, train)
         [_, pred_test, rmsetest] = self.likelihood_func(rnn, test)
 
-        #print(time.time() - t1, ' time elapsed in sec for likelihood')
 
-        # Beginning Sampling using MCMC RANDOMWALK
+        # Beginning sampling using MCMC
+
         y_test = torch.zeros((len(test), self.batch_size))
         for i, dat in enumerate(test, 0):
             inputs, labels = dat
@@ -384,27 +341,13 @@ class ptReplica(multiprocessing.Process):
             inputs, labels = dat
             y_train[i] = copy.deepcopy(labels)
 
-        trainacc = 0
-        testacc = 0
-
-        # prop_list = np.zeros((samples,w_size))
-        # likeh_list = np.zeros((samples,2)) # one for posterior of likelihood and the other for all proposed likelihood
-        # likeh_list[0,:] = [-100, -100] # to avoid prob in calc of 5th and 95th percentile later
-        # surg_likeh_list = np.zeros((samples,2))
-        # accept_list = np.zeros(samples)
-
         num_accepted = 0
         langevin_count = 0
-        pt_samples = samples * 0.6  # this means that PT in canonical form with adaptive temp will work till pt  samples are reached
+        pt_samples = samples * 0.6  # PT in canonical form with adaptive temp will work till assigned limit
         init_count = 0
-        #pos_w[0] = rnn.getparameters(w_proposal)
-        #fxtrain_samples[i + 1,] = fxtrain_samples[i,]
-        #fxtest_samples[i + 1,] = fxtest_samples[i,]
+
         rmse_train[0] = rmsetrain
         rmse_test[0] = rmsetest
-        #acc_train[0] = self.accuracy(pred_train, y_train)
-        #acc_test[0] = self.accuracy(pred_test,y_test)
-
         acc_train[0] = self.accuracy(train)
         acc_test[0] = self.accuracy(test)
 
@@ -413,16 +356,13 @@ class ptReplica(multiprocessing.Process):
         weight_array2[0] = 0
         sum_value_array[0] = 0
 
-        #acc_train[0] = 50.0
-        #acc_test[0] = 50.0
 
-        # print('i and samples')
         for i in range(samples):  # Begin sampling --------------------------------------------------------------------------
 
             ratio = ((samples - i) / (samples * 1.0))
             if i < pt_samples:
-                self.adapttemp = self.temperature  # * ratio  #  T1=T/log(k+1);
-            if i == pt_samples and init_count == 0:  # move to MCMC canonical
+                self.adapttemp = self.temperature    # T1=T/log(k+1);
+            if i == pt_samples and init_count == 0:  # Move to canonical MCMC
                 self.adapttemp = 1
                 [likelihood, pred_train, rmsetrain] = self.likelihood_func(rnn, train, w)
                 [_, pred_test, rmsetest] = self.likelihood_func(rnn, test, w)
@@ -431,27 +371,22 @@ class ptReplica(multiprocessing.Process):
 
             lx = np.random.uniform(0, 1, 1)
             old_w = rnn.state_dict()
-            if (self.use_langevin_gradients is True) and (lx < self.l_prob):
-                #print("Needed")
 
-                #print('using langevin')
-                w_gd = rnn.langevin_gradient(train)  # Eq 8
-                w_proposal = rnn.addnoiseandcopy(0, step_w)  # np.random.normal(w_gd, step_w, w_size) # Eq 7
+            if (self.use_langevin_gradients is True) and (lx < self.l_prob):
+                w_gd = rnn.langevin_gradient(train)
+                w_proposal = rnn.addnoiseandcopy(0, step_w)
                 w_prop_gd = rnn.langevin_gradient(train)
-                # first = np.log(multivariate_normal.pdf(w , w_prop_gd , sigma_diagmat))
-                # second = np.log(multivariate_normal.pdf(w_proposal , w_gd , sigma_diagmat)) # this gives numerical instability - hence we give a simple implementation next that takes out log
                 wc_delta = (rnn.getparameters(w) - rnn.getparameters(w_prop_gd))
                 wp_delta = (rnn.getparameters(w_proposal) - rnn.getparameters(w_gd))
                 sigma_sq = step_w
-                first = -0.5 * np.sum(wc_delta * wc_delta) / sigma_sq  # this is wc_delta.T  *  wc_delta /sigma_sq
+                first = -0.5 * np.sum(wc_delta * wc_delta) / sigma_sq
                 second = -0.5 * np.sum(wp_delta * wp_delta) / sigma_sq
                 diff_prop = first - second
                 diff_prop = diff_prop / self.adapttemp
                 langevin_count = langevin_count + 1
             else:
-                #print("Not needed")
                 diff_prop = 0
-                w_proposal = rnn.addnoiseandcopy(0, step_w)  # np.random.normal(w, step_w, w_size)
+                w_proposal = rnn.addnoiseandcopy(0, step_w)
 
 
 
@@ -459,20 +394,21 @@ class ptReplica(multiprocessing.Process):
             [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(rnn, test)
 
 
-            prior_prop = self.prior_likelihood(sigma_squared, rnn.getparameters(w_proposal))  # takes care of the gradients
+            prior_prop = self.prior_likelihood(sigma_squared, rnn.getparameters(w_proposal))
             diff_likelihood = likelihood_proposal - likelihood
             diff_prior = prior_prop - prior_current
 
+
+            """
             try:
                 mh_prob = min(1, math.exp(diff_likelihood + diff_prior + diff_prop))
             except OverflowError as e:
                 mh_prob = 1
-            # print(likelihood_proposal,likelihood, mh_prob)
+            """
 
             sum_value = diff_likelihood + diff_prior + diff_prop
-            u = np.log(random.uniform(0, 1))
-
             sum_value_array[i] = sum_value
+            u = np.log(random.uniform(0, 1))
 
 
             if u < sum_value:
@@ -482,18 +418,18 @@ class ptReplica(multiprocessing.Process):
                 w = copy.deepcopy(w_proposal)  # rnn.getparameters(w_proposal)
                 acc_train1 = self.accuracy(train)
                 acc_test1 = self.accuracy(test)
-                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'accepted')
+                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'Accepted')
                 rmse_train[i] = rmsetrain
                 rmse_test[i] = rmsetest
                 acc_train[i,] = acc_train1
                 acc_test[i,] = acc_test1
-                # x = x + 1
+
             else:
                 w = old_w
                 rnn.loadparameters(w)
                 acc_train1 = self.accuracy(train)
                 acc_test1 = self.accuracy(test)
-                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'rejected')
+                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'Rejected')
                 rmse_train[i,] = rmse_train[i-1,]
                 rmse_test[i,] = rmse_test[i-1,]
                 acc_train[i,] = acc_train[i-1,]
@@ -524,7 +460,6 @@ class ptReplica(multiprocessing.Process):
         # param = np.concatenate([s_pos_w[i-self.surrogate_interval:i,:],lhood_list[i-self.surrogate_interval:i,:]],axis=1)
         # self.surrogate_parameterqueue.put(param)
 
-
         print ((num_accepted * 100 / (samples * 1.0)), '% was Accepted')
         accept_ratio = num_accepted / (samples * 1.0) * 100
 
@@ -533,41 +468,6 @@ class ptReplica(multiprocessing.Process):
 
         print('Exiting the Thread',self.temperature)
 
-        #file_name = self.path+'/posterior/pos_w/'+'chain_'+ str(self.temperature)+ '.txt'
-        #np.savetxt(file_name,pos_w )
-
-        #file_name = self.path+'/predictions/fxtrain_samples_chain_'+ str(self.temperature)+ '.txt'
-        #np.savetxt(file_name, fxtrain_samples, fmt='%1.2f')
-
-        #file_name = self.path+'/predictions/fxtest_samples_chain_'+ str(self.temperature)+ '.txt'
-        #np.savetxt(file_name, fxtest_samples, fmt='%1.2f')
-        """
-        pathl = self.path + '/predications' + '/chain_' + str(self.temperature)
-
-        file_name = pathl + '/sum_value.txt'
-        np.savetxt(file_name, sum_value_array, fmt='%1.2f')
-
-        file_name = pathl + '/weight[0].txt'
-        np.savetxt(file_name, weight_array, fmt='%1.2f')
-
-        file_name = pathl + '/weight[100].txt'
-        np.savetxt(file_name, weight_array1, fmt='%1.2f')
-
-        file_name = pathl + '/weight[50000].txt'
-        np.savetxt(file_name, weight_array2, fmt='%1.2f')
-
-        file_name = pathl + '/rmse_test.txt'
-        np.savetxt(file_name, rmse_test, fmt='%1.2f')
-
-        file_name = pathl + '/rmse_train.txt'
-        np.savetxt(file_name, rmse_train, fmt='%1.2f')
-
-        file_name = pathl + '/acc_test.txt'
-        np.savetxt(file_name, acc_test, fmt='%1.2f')
-
-        file_name = pathl + '/acc_train.txt'
-        np.savetxt(file_name, acc_train, fmt='%1.2f')
-        """
 
         file_name = self.path + '/predictions/sum_value_' + str(self.temperature) + '.txt'
         np.savetxt(file_name, sum_value_array, fmt='%1.2f')
@@ -593,14 +493,20 @@ class ptReplica(multiprocessing.Process):
         file_name = self.path + '/predictions/acc_train_chain_' + str(self.temperature) + '.txt'
         np.savetxt(file_name, acc_train, fmt='%1.2f')
 
+        file_name = self.path + '/predictions/accept_percentage' + str(self.temperature) + '.txt'
+        with open(file_name, 'w') as f:
+            f.write('%d' % accept_ratio)
+        
 
+
+
+
+# Manages the parallel tempering, initialises and executes the parallel chains
 
 class ParallelTempering:
-
     def __init__(self, use_langevin_gradients, learn_rate, topology, num_chains, maxtemp, NumSample, swap_interval,
-                 path, batch_size, bi, rnn_net='RNN'):
+                 path, batch_size, bi, rnn_net, step_size):
         rnn = Model(topology, learn_rate, batch_size, rnn_net=rnn_net)
-        # FNN Chain variables
         self.rnn = rnn
         self.rnn_net = rnn_net
         self.traindata = data_load(data='train')
@@ -636,6 +542,7 @@ class ParallelTempering:
         self.batch_size = batch_size
         self.masternumsample = NumSample
         self.burni=bi
+        self.step_size=step_size
 
     def default_beta_ladder(self, ndim, ntemps,
                             Tmax):  # https://github.com/konqr/ptemcee/blob/master/ptemcee/sampler.py
@@ -739,7 +646,7 @@ class ParallelTempering:
                 ptReplica(self.use_langevin_gradients, self.learn_rate, w, self.minlim_param, self.maxlim_param,
                           self.NumSamples, self.traindata, self.testdata, self.topology, self.burn_in,
                           self.temperatures[i], self.swap_interval, self.path, self.parameter_queue[i],
-                          self.wait_chain[i], self.event[i], self.batch_size, self.rnn_net))
+                          self.wait_chain[i], self.event[i], self.batch_size, self.rnn_net, self.step_size))
 
     def surr_procedure(self, queue):
         if queue.empty() is False:
@@ -849,11 +756,11 @@ class ParallelTempering:
             print(index, 'Chain Joined')
         self.chain_queue.join()
         #pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, accept_vec, accept = self.show_results()
-        rmse_train, rmse_test, acc_train, acc_test, sva, wa, wa1, wa2 = self.show_results()
+        rmse_train, rmse_test, acc_train, acc_test, sva, wa, wa1, wa2, apal = self.show_results()
         print("NUMBER OF SWAPS = ", self.num_swap)
         swap_perc = self.num_swap * 100 / self.total_swap_proposals
         #return pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, swap_perc, accept_vec, accept
-        return rmse_train, rmse_test, acc_train, acc_test, sva, wa, wa1, wa2
+        return rmse_train, rmse_test, acc_train, acc_test, sva, wa, wa1, wa2, apal, swap_perc
 
     def show_results(self):
         burnin = int(self.NumSamples * self.burn_in)
@@ -874,6 +781,8 @@ class ParallelTempering:
         weight_ar=np.zeros((self.num_chains, self.NumSamples))
         weight_ar1=np.zeros((self.num_chains, self.NumSamples))
         weight_ar2=np.zeros((self.num_chains, self.NumSamples))
+
+        accept_percentage_all_chains=np.zeros(self.num_chains)
 
 
         for i in range(self.num_chains):
@@ -925,26 +834,93 @@ class ParallelTempering:
             dat = np.loadtxt(file_name)
             weight_ar2[i, :] = dat
 
-        chain1_rmsetest = rmse_test[0, :]  # to get posterior of chain 0 only (PT chain with temp 1)
-        chain1_rmsetrain = rmse_train[0, :]
+            file_name = self.path + '/predictions/accept_percentage' + str(self.temperatures[i]) + '.txt'
+            dat = np.loadtxt(file_name)
+            accept_percentage_all_chains[i] = dat
 
-        chain1_acctest = acc_test[0, :]
-        chain1_acctrain = acc_train[0, :]
 
-        #posterior = pos_w.transpose(2, 0, 1).reshape(self.num_param, -1)
+        rmse_train_single_chain_plot = rmse_train[0,:]
+        rmse_test_single_chain_plot = rmse_test[0,:]
+        acc_train_single_chain_plot = acc_train[0,:]
+        acc_test_single_chain_plot = acc_test[0,:]
+        sum_val_array_single_chain_plot = sum_val_array[0]
 
-        # fx_train = fx_train_all.transpose(2,0,1).reshape(self.traindata.shape[0],-1)  # need to comment this if need to save memory
-        # fx_test = fx_test_all.transpose(2,0,1).reshape(self.testdata.shape[0],-1)
+        path = 'mnist_torch/CNN/graphs'
 
-        # fx_test = fxtest_samples.reshape(self.num_chains*(self.NumSamples - burnin), self.testdata.shape[0]) # konarks version
+        x2 = np.linspace(0, self.NumSamples, num=self.NumSamples)
 
-        #likelihood_vec = likelihood_rep.transpose(2, 0, 1).reshape(2, -1)
 
-        '''rmse_train = rmse_train[  : , 0: mcmc_samples]
-        rmse_test = rmse_test[  : , 0: mcmc_samples]
+        plt.plot(x2, sum_val_array_single_chain_plot, label='Sum Value')
+        plt.legend(loc='upper right')
+        plt.title("Sum Value Single Chain")
+        plt.savefig(path + '/sum_value_single_chain.png')
+        plt.clf()
 
-        acc_train = rmse_train[  : , 0: mcmc_samples]
-        acc_test = rmse_test[  : , 0: mcmc_samples] '''
+        color = 'tab:red'
+        plt.plot(x2, acc_train_single_chain_plot, label="Train", color=color)
+        color = 'tab:blue'
+        plt.plot(x2, acc_test_single_chain_plot, label="Test", color=color)
+        plt.xlabel('Samples')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        plt.savefig(path + '/superimposed_acc_single_chain.png')
+        plt.clf()
+
+        color = 'tab:red'
+        plt.plot(x2, rmse_train_single_chain_plot, label="Train", color=color)
+        color = 'tab:blue'
+        plt.plot(x2, rmse_test_single_chain_plot, label="Test", color=color)
+        plt.xlabel('Samples')
+        plt.ylabel('RMSE')
+        plt.legend()
+        plt.savefig(path + '/superimposed_rmse_single_chain.png')
+        plt.clf()
+
+
+
+        """
+        fig2, ax7 = plt.subplots()
+
+        color = 'tab:red'
+        ax7.set_xlabel('Samples')
+        ax7.set_ylabel('Accuracy Train Single Chain', color=color)
+        ax7.plot(x2, acc_train_single_chain_plot, color=color)
+        ax7.tick_params(axis='y', labelcolor=color)
+
+        ax8 = ax7.twinx()  # instantiate a second axes that shares the same x-axis
+
+        color = 'tab:blue'
+        ax8.set_ylabel('Accuracy Test Single Chain', color=color)  # we already handled the x-label with ax1
+        ax8.plot(x2, acc_test_single_chain_plot, color=color)
+        ax8.tick_params(axis='y', labelcolor=color)
+
+        fig2.tight_layout()  # otherwise the right y-label is slightly clipped
+        plt.savefig(path + '/superimposed_acc_single_chain.png')
+        plt.clf()
+
+
+
+        fig3, ax9 = plt.subplots()
+
+        color = 'tab:red'
+        ax9.set_xlabel('Samples')
+        ax9.set_ylabel('RMSE Train Single Chain', color=color)
+        ax9.plot(x2, rmse_train_single_chain_plot, color=color)
+        ax9.tick_params(axis='y', labelcolor=color)
+
+        ax10 = ax9.twinx()  # instantiate a second axes that shares the same x-axis
+
+        color = 'tab:blue'
+        ax10.set_ylabel('RMSE Test Single Chain', color=color)  # we already handled the x-label with ax1
+        ax10.plot(x2, rmse_test_single_chain_plot, color=color)
+        ax10.tick_params(axis='y', labelcolor=color)
+
+        fig3.tight_layout()  # otherwise the right y-label is slightly clipped
+        plt.savefig(path + '/superimposed_rmse_single_chain.png')
+        plt.clf()
+        
+        """
+
 
 
         rmse_train = rmse_train.reshape((self.num_chains * self.NumSamples), 1)
@@ -956,10 +932,12 @@ class ParallelTempering:
         weight_ar1 = weight_ar1.reshape((self.num_chains * self.NumSamples), 1)
         weight_ar2 = weight_ar2.reshape((self.num_chains * self.NumSamples), 1)
 
+
         x = np.linspace(0, int(self.masternumsample - self.masternumsample * self.burni), num=int(self.masternumsample - self.masternumsample * self.burni))
         x1 = np.linspace(0, self.masternumsample, num=self.masternumsample)
 
-        path = 'mnist_torch/CNN/graphs'
+
+
 
         plt.plot(x1, weight_ar, label='Weight[0]')
         plt.legend(loc='upper right')
@@ -979,8 +957,6 @@ class ParallelTempering:
         plt.savefig(path + '/weight[50000]_samples.png')
         plt.clf()
 
-
-
         plt.plot(x1, sum_val_array, label='Sum_Value')
         plt.legend(loc='upper right')
         plt.title("Sum Value Over Samples")
@@ -993,6 +969,30 @@ class ParallelTempering:
         # plt.savefig('mnist_torch_single_chain' + '/accuracy_samples.png')
         # plt.clf()
 
+        color = 'tab:red'
+        plt.plot(x1, acc_train, label="Train", color=color)
+        color = 'tab:blue'
+        plt.plot(x1, acc_test, label="Test", color=color)
+        plt.xlabel('Samples')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        plt.savefig(path + '/superimposed_acc.png')
+        plt.clf()
+
+        color = 'tab:red'
+        plt.plot(x1, rmse_train, label="Train", color=color)
+        color = 'tab:blue'
+        plt.plot(x1, rmse_test, label="Test", color=color)
+        plt.xlabel('Samples')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        plt.savefig(path + '/superimposed_rmse.png')
+        plt.clf()
+
+
+
+
+        """
         fig, ax1 = plt.subplots()
 
         color = 'tab:red'
@@ -1019,6 +1019,7 @@ class ParallelTempering:
         plt.savefig(path + '/superimposed_acc.png')
         plt.clf()
 
+
         fig1, ax4 = plt.subplots()
 
         color = 'tab:red'
@@ -1044,7 +1045,7 @@ class ParallelTempering:
         fig.tight_layout()  # otherwise the right y-label is slightly clipped
         plt.savefig(path + '/superimposed_rmse.png')
         plt.clf()
-
+        """
 
         '''rmse_train = rmse_train.reshape(self.num_chains*(mcmc_samples), 1)
         acc_train = acc_train.reshape(self.num_chains*(mcmc_samples), 1)
@@ -1069,7 +1070,7 @@ class ParallelTempering:
         #np.savetxt(self.path + '/acceptpercent.txt', [accept], fmt='%1.2f')
 
         #return posterior, fx_train_all, fx_test_all, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec.T, accept_vec, accept
-        return rmse_train, rmse_test, acc_train, acc_test, sum_val_array, weight_ar, weight_ar1, weight_ar2
+        return rmse_train, rmse_test, acc_train, acc_test, sum_val_array, weight_ar, weight_ar1, weight_ar2, accept_percentage_all_chains
 
     def make_directory(self, directory):
         if not os.path.exists(directory):
@@ -1087,6 +1088,7 @@ def main():
     swap_ratio = args.swap_ratio
     burn_in = args.burn_in
     learning_rate = args.learning_rate
+    step_size = args.step_size
     maxtemp = 2
     use_langevin_gradients = True  # False leaves it as Random-walk proposals. Note that Langevin gradients will take a bit more time computationally
     bi = burn_in
@@ -1111,7 +1113,7 @@ def main():
     timer = time.time()
 
     pt = ParallelTempering(use_langevin_gradients, learning_rate, topology, num_chains, maxtemp, numSamples,
-                           swap_interval, path, batch_size, bi, rnn_net=net1)
+                           swap_interval, path, batch_size, bi, net1, step_size)
 
     directories = [path + '/predictions/', path+'/graphs/']
     for d in directories:
@@ -1119,7 +1121,7 @@ def main():
 
     pt.initialize_chains(burn_in)
     #pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_rep, swap_perc, accept_vec, accept = pt.run_chains()
-    rmse_train, rmse_test, acc_train, acc_test, sum_value_array, weigh_array, weigh_array1, weigh_array2 = pt.run_chains()
+    rmse_train, rmse_test, acc_train, acc_test, sum_value_array, weigh_array, weigh_array1, weigh_array2, accept_percent_all, sp = pt.run_chains()
 
 
 
@@ -1131,7 +1133,7 @@ def main():
     # print(accept_per, ' accept_per')
 
     timetotal = (timer2 - timer) /60
-    print ((timetotal), 'is the minutes taken')
+
 
 
     """
@@ -1171,6 +1173,8 @@ def main():
     rmsetest_std = np.std(rmse_test[int(numSamples * burnin):])
     rmsetes_max = np.amax(rmse_test[int(numSamples * burnin):])
 
+    accept_percent_mean = np.mean(accept_percent_all)
+
     # outres = open(path+'/result.txt', "a+")
     # outres_db = open(path_db+'/result.txt', "a+")
     # resultingfile = open(problemfolder+'/master_result_file.txt','a+')
@@ -1188,5 +1192,14 @@ def main():
     print("\n")
     print("Test RMSE (Mean, Max, Std)")
     print(rmse_tes, rmsetes_max, rmsetest_std)
+    print("\n")
+    print("Acceptance Percentage Mean")
+    print(accept_percent_mean)
+    print("\n")
+    print("Swap Percentage")
+    print(sp)
+    print("\n")
+    print("Time (Minutes)")
+    print(timetotal)
 
 if __name__ == "__main__": main()
