@@ -51,13 +51,13 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 250
+        size = 2000
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
         samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True, transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                      torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
-        size = 500
+        size = 1000
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     data_loader = torch.utils.data.DataLoader(a,
@@ -66,24 +66,36 @@ def data_load(data='train'):
     return data_loader
 
 
+def data_load1():
+    samples = torchvision.datasets.MNIST(root='./mnist', train=False, download=True,
+                                     transform=torchvision.transforms.Compose([transforms.ToTensor(),
+                                                                               torchvision.transforms.Normalize(
+                                                                                   (0.1307,), (0.3081,))]))
+    size = 10000
+    a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
+    data_loader = torch.utils.data.DataLoader(a,
+                                              batch_size=100,
+                                              shuffle=True)
+    return data_loader
+
 
 
 
 # Initialise and parse command-line inputs
 
 parser = argparse.ArgumentParser(description='PT MCMC CNN')
-parser.add_argument('-s', '--samples', help='Number of samples', default=500, dest="samples", type=int)
+parser.add_argument('-s', '--samples', help='Number of samples', default=2000, dest="samples", type=int)
 parser.add_argument('-r', '--replicas', help='Number of chains/replicas, best to have one per availble core/cpu',
                     default=10, dest="num_chains", type=int)
 parser.add_argument('-lr', '--learning_rate', help='Learning Rate for Model', dest="learning_rate",
                     default=0.01, type=float)
-parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.02, type=float)
+parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.01, type=float)
 parser.add_argument('-b', '--burn', help='How many samples to discard before determing posteriors', dest="burn_in",
                     default=0.50, type=float)
 parser.add_argument('-pt', '--ptsamples', help='Ratio of PT vs straight MCMC samples to run', dest="pt_samples",
                     default=0.5, type=float)
 parser.add_argument('-step', '--step_size', help='Step size for proposals (0.02, 0.05, 0.1 etc)', dest="step_size",
-                    default=0.005, type=float) # Junk
+                    default=0.005, type=float)
 parser.add_argument('-t', '--temperature', help='Demoninator to determine Max Temperature of chains (MT=no.chains*t) ',
                     default=2, dest="mt_val", type=int) #Junk
 parser.add_argument('-n', '--net', help='Choose rnn net, "1" for RNN, "2" for GRU, "3" for LSTM', default=4, dest="net",
@@ -452,6 +464,13 @@ class ptReplica(multiprocessing.Process):
 
             if i % 100 == 0:
                 print(i, rmsetrain, rmsetest, 'Iteration Number and RMSE Train & Test')
+
+
+        """
+        big_data=data_load1()
+        final_test_acc=self.accuracy(big_data)
+        print(final_test_acc)
+        """
 
         param = np.concatenate([np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1), np.asarray([likelihood]),np.asarray([self.temperature]), np.asarray([i])])
         # print('SWAPPED PARAM',self.temperature,param)
@@ -945,16 +964,34 @@ class ParallelTempering:
         plt.savefig(path + '/weight[0]_samples.png')
         plt.clf()
 
+        plt.hist(weight_ar, bins=20, color="skyblue", alpha=0.5)
+        plt.ylabel('Frequency')
+        plt.xlabel('Parameter Values')
+        plt.savefig(path + '/weight[0]_hist.png')
+        plt.clf()
+
         plt.plot(x1, weight_ar1, label='Weight[100]')
         plt.legend(loc='upper right')
         plt.title("Weight[100] Trace")
         plt.savefig(path + '/weight[100]_samples.png')
         plt.clf()
 
+        plt.hist(weight_ar1, bins=20, color="skyblue", alpha=0.5)
+        plt.ylabel('Frequency')
+        plt.xlabel('Parameter Values')
+        plt.savefig(path + '/weight[100]_hist.png')
+        plt.clf()
+
         plt.plot(x1, weight_ar2, label='Weight[50000]')
         plt.legend(loc='upper right')
         plt.title("Weight[50000] Trace")
         plt.savefig(path + '/weight[50000]_samples.png')
+        plt.clf()
+
+        plt.hist(weight_ar2, bins=20, color="skyblue", alpha=0.5)
+        plt.ylabel('Frequency')
+        plt.xlabel('Parameter Values')
+        plt.savefig(path + '/weight[50000]_hist.png')
         plt.clf()
 
         plt.plot(x1, sum_val_array, label='Sum_Value')
