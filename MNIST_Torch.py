@@ -51,13 +51,13 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 2000
+        size = 1000 # Test
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
         samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True, transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                      torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
-        size = 1000
+        size = 2000 # Train
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     data_loader = torch.utils.data.DataLoader(a,
