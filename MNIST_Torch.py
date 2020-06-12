@@ -26,21 +26,14 @@ mpl.use('agg')
 torch.backends.cudnn.enabled = False
 device = 'cpu'
 
-
-
-
-
 # Hyper-Parameters
 
-input_size = 320 # Junk
-hidden_size = 50 # Junk
-num_layers = 2 # Junk
+input_size = 320  # Junk
+hidden_size = 50  # Junk
+num_layers = 2  # Junk
 num_classes = 10
 batch_size = 200
 batch_Size = batch_size
-
-
-
 
 
 # Loading the MNIST data from torchvision
@@ -51,21 +44,22 @@ def data_load(data='train'):
                                              transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                        torchvision.transforms.Normalize(
                                                                                            (0.1307,), (0.3081,))]))
-        size = 10000 # Test
+        size = 10000  # Test
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
     else:
-        samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True, transform=torchvision.transforms.Compose([transforms.ToTensor(),
-                                                     torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
-        size = 10000 # Train
+        samples = torchvision.datasets.MNIST(root='./mnist', train=True, download=True,
+                                             transform=torchvision.transforms.Compose([transforms.ToTensor(),
+                                                                                       torchvision.transforms.Normalize(
+                                                                                           (0.1307,), (0.3081,))]))
+        size = 10000  # Train
         a, _ = torch.utils.data.random_split(samples, [size, len(samples) - size])
 
-    data_loader = torch.utils.data.DataLoader(a,
-                                              batch_size=batch_size,
-                                              shuffle=True)
+    data_loader = torch.utils.data.DataLoader(a, batch_size=batch_size, shuffle=True)
     return data_loader
 
 
+"""
 def data_load1():
     samples = torchvision.datasets.MNIST(root='./mnist', train=False, download=True,
                                      transform=torchvision.transforms.Compose([transforms.ToTensor(),
@@ -77,19 +71,17 @@ def data_load1():
                                               batch_size=100,
                                               shuffle=True)
     return data_loader
-
-
-
+"""
 
 # Initialise and parse command-line inputs
 
 parser = argparse.ArgumentParser(description='PT MCMC CNN')
-parser.add_argument('-s', '--samples', help='Number of samples', default=1000, dest="samples", type=int)
+parser.add_argument('-s', '--samples', help='Number of samples', default=2000, dest="samples", type=int)
 parser.add_argument('-r', '--replicas', help='Number of chains/replicas, best to have one per availble core/cpu',
                     default=10, dest="num_chains", type=int)
 parser.add_argument('-lr', '--learning_rate', help='Learning Rate for Model', dest="learning_rate",
                     default=0.01, type=float)
-parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.01, type=float)
+parser.add_argument('-swap', '--swap', help='Swap Ratio', dest="swap_ratio", default=0.005, type=float)
 parser.add_argument('-b', '--burn', help='How many samples to discard before determing posteriors', dest="burn_in",
                     default=0.50, type=float)
 parser.add_argument('-pt', '--ptsamples', help='Ratio of PT vs straight MCMC samples to run', dest="pt_samples",
@@ -97,16 +89,13 @@ parser.add_argument('-pt', '--ptsamples', help='Ratio of PT vs straight MCMC sam
 parser.add_argument('-step', '--step_size', help='Step size for proposals (0.02, 0.05, 0.1 etc)', dest="step_size",
                     default=0.005, type=float)
 parser.add_argument('-t', '--temperature', help='Demoninator to determine Max Temperature of chains (MT=no.chains*t) ',
-                    default=2, dest="mt_val", type=int) #Junk
+                    default=2, dest="mt_val", type=int)  # Junk
 parser.add_argument('-n', '--net', help='Choose rnn net, "1" for RNN, "2" for GRU, "3" for LSTM', default=4, dest="net",
-                    type=int) # Junk
+                    type=int)  # Junk
 args = parser.parse_args()
 
 
 def f(): raise Exception("Found exit()")
-
-
-
 
 
 # CNN model defined using pytorch
@@ -118,7 +107,7 @@ class Model(nn.Module):
             self.conv1 = nn.Conv2d(1, 32, 5, 1)
             self.conv2 = nn.Conv2d(32, 64, 5, 1)
             self.fc1 = nn.Linear(1024, 10)
-            #self.fc2 = nn.Linear(128, 10)
+            # self.fc2 = nn.Linear(128, 10)
             self.batch_size = batch_size
             self.sigmoid = nn.Sigmoid()
             self.topo = topo
@@ -218,9 +207,6 @@ class Model(nn.Module):
         return dic
 
 
-
-
-
 # Each instance of the class is one parallel chain
 
 class ptReplica(multiprocessing.Process):
@@ -251,8 +237,9 @@ class ptReplica(multiprocessing.Process):
         self.use_langevin_gradients = use_langevin_gradients
         self.sgd_depth = 1  # Keep as 1
         self.learn_rate = learn_rate
-        self.l_prob = 0.5  # Ratio of langevin based proposals, higher value leads to more computation time, evaluate for different problems
-        self.step_size=step_size
+        self.l_prob = 0.7  # Ratio of langevin based proposals, higher value leads to more computation time, evaluate for different problems
+        self.step_size = step_size
+
     # Returns loss value
 
     def rmse(self, pred, actual):
@@ -293,7 +280,7 @@ class ptReplica(multiprocessing.Process):
                             lhood += 0
                         else:
                             lhood += np.log(prob[i, j, k])
-        return [lhood/self.adapttemp, fx, rmse]
+        return [lhood / self.adapttemp, fx, rmse]
 
     # Calculates prior value, change based on problem
 
@@ -314,7 +301,7 @@ class ptReplica(multiprocessing.Process):
         w_size = len(rnn.getparameters(w))
         step_w = self.step_size
 
-        rmse_train  = np.zeros(samples)
+        rmse_train = np.zeros(samples)
         rmse_test = np.zeros(samples)
         acc_train = np.zeros(samples)
         acc_test = np.zeros(samples)
@@ -329,20 +316,26 @@ class ptReplica(multiprocessing.Process):
 
         eta = 0  # Junk variable
 
+
+
         w_proposal = np.random.randn(w_size)
         w_proposal = rnn.dictfromlist(w_proposal)
         train = self.traindata
         test = self.testdata
 
-
         sigma_squared = 25
         prior_current = self.prior_likelihood(sigma_squared, rnn.getparameters(w))  # takes care of the gradients
 
-
         # Evaluate Likelihoods
+
+
+
         [likelihood, pred_train, rmsetrain] = self.likelihood_func(rnn, train)
+
+        #print("Hi")
         [_, pred_test, rmsetest] = self.likelihood_func(rnn, test)
 
+        #print("Bye")
 
         # Beginning sampling using MCMC
 
@@ -373,21 +366,22 @@ class ptReplica(multiprocessing.Process):
 
         sum_value_array[0] = 0
 
-
-        for i in range(samples):  # Begin sampling --------------------------------------------------------------------------
+        for i in range(
+                samples):  # Begin sampling --------------------------------------------------------------------------
 
             ratio = ((samples - i) / (samples * 1.0))
             if i < pt_samples:
-                self.adapttemp = self.temperature    # T1=T/log(k+1);
+                self.adapttemp = self.temperature  # T1=T/log(k+1);
             if i == pt_samples and init_count == 0:  # Move to canonical MCMC
                 self.adapttemp = 1
                 [likelihood, pred_train, rmsetrain] = self.likelihood_func(rnn, train, w)
                 [_, pred_test, rmsetest] = self.likelihood_func(rnn, test, w)
                 init_count = 1
 
-
             lx = np.random.uniform(0, 1, 1)
             old_w = rnn.state_dict()
+
+
 
             if (self.use_langevin_gradients is True) and (lx < self.l_prob):
                 w_gd = rnn.langevin_gradient(train)
@@ -405,16 +399,12 @@ class ptReplica(multiprocessing.Process):
                 diff_prop = 0
                 w_proposal = rnn.addnoiseandcopy(0, step_w)
 
-
-
             [likelihood_proposal, pred_train, rmsetrain] = self.likelihood_func(rnn, train)
             [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(rnn, test)
-
 
             prior_prop = self.prior_likelihood(sigma_squared, rnn.getparameters(w_proposal))
             diff_likelihood = likelihood_proposal - likelihood
             diff_prior = prior_prop - prior_current
-
 
             """
             try:
@@ -423,10 +413,10 @@ class ptReplica(multiprocessing.Process):
                 mh_prob = 1
             """
 
+
             sum_value = diff_likelihood + diff_prior + diff_prop
             sum_value_array[i] = sum_value
             u = np.log(random.uniform(0, 1))
-
 
             if u < sum_value:
                 num_accepted = num_accepted + 1
@@ -435,7 +425,7 @@ class ptReplica(multiprocessing.Process):
                 w = copy.deepcopy(w_proposal)  # rnn.getparameters(w_proposal)
                 acc_train1 = self.accuracy(train)
                 acc_test1 = self.accuracy(test)
-                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'Accepted')
+                print(i, rmsetrain, rmsetest, acc_train1, acc_test1, 'Accepted')
                 rmse_train[i] = rmsetrain
                 rmse_test[i] = rmsetest
                 acc_train[i,] = acc_train1
@@ -446,11 +436,11 @@ class ptReplica(multiprocessing.Process):
                 rnn.loadparameters(w)
                 acc_train1 = self.accuracy(train)
                 acc_test1 = self.accuracy(test)
-                print (i, rmsetrain, rmsetest, acc_train1, acc_test1, 'Rejected')
-                rmse_train[i,] = rmse_train[i-1,]
-                rmse_test[i,] = rmse_test[i-1,]
-                acc_train[i,] = acc_train[i-1,]
-                acc_test[i,] = acc_test[i-1,]
+                print(i, rmsetrain, rmsetest, acc_train1, acc_test1, 'Rejected')
+                rmse_train[i,] = rmse_train[i - 1,]
+                rmse_test[i,] = rmse_test[i - 1,]
+                acc_train[i,] = acc_train[i - 1,]
+                acc_test[i,] = acc_test[i - 1,]
 
             ll = rnn.getparameters()
             weight_array[i] = ll[0]
@@ -460,7 +450,8 @@ class ptReplica(multiprocessing.Process):
             weight_array4[i] = ll[60000]
 
             if (i + 1) % self.swap_interval == 0:
-                param = np.concatenate([np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1),np.asarray([likelihood]), np.asarray([self.temperature]), np.asarray([i])])
+                param = np.concatenate([np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1),
+                                        np.asarray([likelihood]), np.asarray([self.temperature]), np.asarray([i])])
                 self.parameter_queue.put(param)
                 self.signal_main.set()
                 self.event.clear()
@@ -472,28 +463,28 @@ class ptReplica(multiprocessing.Process):
             if i % 100 == 0:
                 print(i, rmsetrain, rmsetest, 'Iteration Number and RMSE Train & Test')
 
-
         """
         big_data=data_load1()
         final_test_acc=self.accuracy(big_data)
         print(final_test_acc)
         """
 
-        param = np.concatenate([np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1), np.asarray([likelihood]),np.asarray([self.temperature]), np.asarray([i])])
+        param = np.concatenate(
+            [np.asarray([rnn.getparameters(w)]).reshape(-1), np.asarray([eta]).reshape(-1), np.asarray([likelihood]),
+             np.asarray([self.temperature]), np.asarray([i])])
         # print('SWAPPED PARAM',self.temperature,param)
         # self.parameter_queue.put(param)
         self.signal_main.set()
         # param = np.concatenate([s_pos_w[i-self.surrogate_interval:i,:],lhood_list[i-self.surrogate_interval:i,:]],axis=1)
         # self.surrogate_parameterqueue.put(param)
 
-        print ((num_accepted * 100 / (samples * 1.0)), '% was Accepted')
+        print((num_accepted * 100 / (samples * 1.0)), '% was Accepted')
         accept_ratio = num_accepted / (samples * 1.0) * 100
 
-        print ((langevin_count * 100 / (samples * 1.0)), '% was Langevin')
+        print((langevin_count * 100 / (samples * 1.0)), '% was Langevin')
         langevin_ratio = langevin_count / (samples * 1.0) * 100
 
-        print('Exiting the Thread',self.temperature)
-
+        print('Exiting the Thread', self.temperature)
 
         file_name = self.path + '/predictions/sum_value_' + str(self.temperature) + '.txt'
         np.savetxt(file_name, sum_value_array, fmt='%1.2f')
@@ -528,9 +519,6 @@ class ptReplica(multiprocessing.Process):
         file_name = self.path + '/predictions/accept_percentage' + str(self.temperature) + '.txt'
         with open(file_name, 'w') as f:
             f.write('%d' % accept_ratio)
-        
-
-
 
 
 # Manages the parallel tempering, initialises and executes the parallel chains
@@ -573,8 +561,8 @@ class ParallelTempering:
         self.use_langevin_gradients = use_langevin_gradients
         self.batch_size = batch_size
         self.masternumsample = NumSample
-        self.burni=bi
-        self.step_size=step_size
+        self.burni = bi
+        self.step_size = step_size
 
     def default_beta_ladder(self, ndim, ntemps,
                             Tmax):  # https://github.com/konqr/ptemcee/blob/master/ptemcee/sampler.py
@@ -597,26 +585,26 @@ class ParallelTempering:
             raise ValueError('Invalid number of temperatures specified.')
 
         tstep = np.array([25.2741, 7., 4.47502, 3.5236, 3.0232,
-                        2.71225, 2.49879, 2.34226, 2.22198, 2.12628,
-                        2.04807, 1.98276, 1.92728, 1.87946, 1.83774,
-                        1.80096, 1.76826, 1.73895, 1.7125, 1.68849,
-                        1.66657, 1.64647, 1.62795, 1.61083, 1.59494,
-                        1.58014, 1.56632, 1.55338, 1.54123, 1.5298,
-                        1.51901, 1.50881, 1.49916, 1.49, 1.4813,
-                        1.47302, 1.46512, 1.45759, 1.45039, 1.4435,
-                        1.4369, 1.43056, 1.42448, 1.41864, 1.41302,
-                        1.40761, 1.40239, 1.39736, 1.3925, 1.38781,
-                        1.38327, 1.37888, 1.37463, 1.37051, 1.36652,
-                        1.36265, 1.35889, 1.35524, 1.3517, 1.34825,
-                        1.3449, 1.34164, 1.33847, 1.33538, 1.33236,
-                        1.32943, 1.32656, 1.32377, 1.32104, 1.31838,
-                        1.31578, 1.31325, 1.31076, 1.30834, 1.30596,
-                        1.30364, 1.30137, 1.29915, 1.29697, 1.29484,
-                        1.29275, 1.29071, 1.2887, 1.28673, 1.2848,
-                        1.28291, 1.28106, 1.27923, 1.27745, 1.27569,
-                        1.27397, 1.27227, 1.27061, 1.26898, 1.26737,
-                        1.26579, 1.26424, 1.26271, 1.26121,
-                        1.25973])
+                          2.71225, 2.49879, 2.34226, 2.22198, 2.12628,
+                          2.04807, 1.98276, 1.92728, 1.87946, 1.83774,
+                          1.80096, 1.76826, 1.73895, 1.7125, 1.68849,
+                          1.66657, 1.64647, 1.62795, 1.61083, 1.59494,
+                          1.58014, 1.56632, 1.55338, 1.54123, 1.5298,
+                          1.51901, 1.50881, 1.49916, 1.49, 1.4813,
+                          1.47302, 1.46512, 1.45759, 1.45039, 1.4435,
+                          1.4369, 1.43056, 1.42448, 1.41864, 1.41302,
+                          1.40761, 1.40239, 1.39736, 1.3925, 1.38781,
+                          1.38327, 1.37888, 1.37463, 1.37051, 1.36652,
+                          1.36265, 1.35889, 1.35524, 1.3517, 1.34825,
+                          1.3449, 1.34164, 1.33847, 1.33538, 1.33236,
+                          1.32943, 1.32656, 1.32377, 1.32104, 1.31838,
+                          1.31578, 1.31325, 1.31076, 1.30834, 1.30596,
+                          1.30364, 1.30137, 1.29915, 1.29697, 1.29484,
+                          1.29275, 1.29071, 1.2887, 1.28673, 1.2848,
+                          1.28291, 1.28106, 1.27923, 1.27745, 1.27569,
+                          1.27397, 1.27227, 1.27061, 1.26898, 1.26737,
+                          1.26579, 1.26424, 1.26271, 1.26121,
+                          1.25973])
 
         if ndim > tstep.shape[0]:
             # An approximation to the temperature step at large
@@ -740,17 +728,17 @@ class ParallelTempering:
         swaps_affected_main = 0
         total_swaps = 0
         for i in range(int(self.NumSamples / self.swap_interval)):
-            #print(i,int(self.NumSamples/self.swap_interval), 'Counting')
+            # print(i,int(self.NumSamples/self.swap_interval), 'Counting')
             count = 0
             for index in range(self.num_chains):
                 if not self.chains[index].is_alive():
                     count += 1
                     self.wait_chain[index].set()
-                    #print(str(self.chains[index].temperature) + " Dead" + str(index))
+                    # print(str(self.chains[index].temperature) + " Dead" + str(index))
 
             if count == self.num_chains:
                 break
-            #print(count,'Is the Count')
+            # print(count,'Is the Count')
             timeout_count = 0
             for index in range(0, self.num_chains):
                 # print("Waiting for chain: {}".format(index+1))
@@ -760,11 +748,11 @@ class ParallelTempering:
                     timeout_count += 1
 
             if timeout_count != self.num_chains:
-                #print("Skipping the Swap!")
+                # print("Skipping the Swap!")
                 continue
-            #print("Event Occured")
+            # print("Event Occured")
             for index in range(0, self.num_chains - 1):
-                #print('Starting Swap')
+                # print('Starting Swap')
                 swapped = False
                 param_1, param_2, swapped = self.swap_procedure(self.parameter_queue[index],
                                                                 self.parameter_queue[index + 1])
@@ -782,58 +770,56 @@ class ParallelTempering:
 
         # JOIN THEM TO MAIN PROCESS
         for index in range(0, self.num_chains):
-            print('Waiting to Join ',index,self.num_chains)
+            print('Waiting to Join ', index, self.num_chains)
             print(self.chains[index].is_alive())
             self.chains[index].join()
             print(index, 'Chain Joined')
         self.chain_queue.join()
-        #pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, accept_vec, accept = self.show_results()
+        # pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, accept_vec, accept = self.show_results()
         rmse_train, rmse_test, acc_train, acc_test, apal = self.show_results()
         print("NUMBER OF SWAPS = ", self.num_swap)
         swap_perc = self.num_swap * 100 / self.total_swap_proposals
-        #return pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, swap_perc, accept_vec, accept
+        # return pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec, swap_perc, accept_vec, accept
         return rmse_train, rmse_test, acc_train, acc_test, apal, swap_perc
 
     def show_results(self):
         burnin = int(self.NumSamples * self.burn_in)
         mcmc_samples = int(self.NumSamples * 0.25)
-        #likelihood_rep = np.zeros((self.num_chains, self.NumSamples - burnin,2))  # index 1 for likelihood posterior and index 0 for Likelihood proposals. Note all likilihood proposals plotted only
-        #accept_percent = np.zeros((self.num_chains, 1))
-        #accept_list = np.zeros((self.num_chains, self.NumSamples))
-        #pos_w = np.zeros((self.num_chains, self.NumSamples - burnin, self.num_param))
-        #fx_train_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.traindata)))
+        # likelihood_rep = np.zeros((self.num_chains, self.NumSamples - burnin,2))  # index 1 for likelihood posterior and index 0 for Likelihood proposals. Note all likilihood proposals plotted only
+        # accept_percent = np.zeros((self.num_chains, 1))
+        # accept_list = np.zeros((self.num_chains, self.NumSamples))
+        # pos_w = np.zeros((self.num_chains, self.NumSamples - burnin, self.num_param))
+        # fx_train_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.traindata)))
         rmse_train = np.zeros((self.num_chains, self.NumSamples))
         acc_train = np.zeros((self.num_chains, self.NumSamples))
 
-        #fx_test_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.testdata)))
+        # fx_test_all = np.zeros((self.num_chains, self.NumSamples - burnin, len(self.testdata)))
         rmse_test = np.zeros((self.num_chains, self.NumSamples))
         acc_test = np.zeros((self.num_chains, self.NumSamples))
-        sum_val_array=np.zeros((self.num_chains, self.NumSamples))
+        sum_val_array = np.zeros((self.num_chains, self.NumSamples))
 
-        weight_ar=np.zeros((self.num_chains, self.NumSamples))
-        weight_ar1=np.zeros((self.num_chains, self.NumSamples))
-        weight_ar2=np.zeros((self.num_chains, self.NumSamples))
+        weight_ar = np.zeros((self.num_chains, self.NumSamples))
+        weight_ar1 = np.zeros((self.num_chains, self.NumSamples))
+        weight_ar2 = np.zeros((self.num_chains, self.NumSamples))
         weight_ar3 = np.zeros((self.num_chains, self.NumSamples))
         weight_ar4 = np.zeros((self.num_chains, self.NumSamples))
 
-        accept_percentage_all_chains=np.zeros(self.num_chains)
-
+        accept_percentage_all_chains = np.zeros(self.num_chains)
 
         for i in range(self.num_chains):
+            # file_name = self.path + '/posterior/pos_w/' + 'chain_' + str(self.temperatures[i]) + '.txt'
+            # print(self.path)
+            # print(file_name)
+            # dat = np.loadtxt(file_name)
+            # pos_w[i, :, :] = dat[burnin:, :]
 
-            #file_name = self.path + '/posterior/pos_w/' + 'chain_' + str(self.temperatures[i]) + '.txt'
-            #print(self.path)
-            #print(file_name)
-            #dat = np.loadtxt(file_name)
-            #pos_w[i, :, :] = dat[burnin:, :]
+            # file_name = self.path + '/posterior/pos_likelihood/' + 'chain_' + str(self.temperatures[i]) + '.txt'
+            # dat = np.loadtxt(file_name)
+            # likelihood_rep[i, :] = dat[burnin:]
 
-            #file_name = self.path + '/posterior/pos_likelihood/' + 'chain_' + str(self.temperatures[i]) + '.txt'
-            #dat = np.loadtxt(file_name)
-            #likelihood_rep[i, :] = dat[burnin:]
-
-            #file_name = self.path + '/posterior/accept_list/' + 'chain_' + str(self.temperatures[i]) + '.txt'
-            #dat = np.loadtxt(file_name)
-            #accept_list[i, :] = dat
+            # file_name = self.path + '/posterior/accept_list/' + 'chain_' + str(self.temperatures[i]) + '.txt'
+            # dat = np.loadtxt(file_name)
+            # accept_list[i, :] = dat
 
             file_name = self.path + '/predictions/rmse_test_chain_' + str(self.temperatures[i]) + '.txt'
             dat = np.loadtxt(file_name)
@@ -854,7 +840,6 @@ class ParallelTempering:
             file_name = self.path + '/predictions/sum_value_' + str(self.temperatures[i]) + '.txt'
             dat = np.loadtxt(file_name)
             sum_val_array[i, :] = dat
-
 
             file_name = self.path + '/predictions/weight[0]_' + str(self.temperatures[i]) + '.txt'
             dat = np.loadtxt(file_name)
@@ -880,17 +865,15 @@ class ParallelTempering:
             dat = np.loadtxt(file_name)
             accept_percentage_all_chains[i] = dat
 
-
-        rmse_train_single_chain_plot = rmse_train[0,:]
-        rmse_test_single_chain_plot = rmse_test[0,:]
-        acc_train_single_chain_plot = acc_train[0,:]
-        acc_test_single_chain_plot = acc_test[0,:]
+        rmse_train_single_chain_plot = rmse_train[0, :]
+        rmse_test_single_chain_plot = rmse_test[0, :]
+        acc_train_single_chain_plot = acc_train[0, :]
+        acc_test_single_chain_plot = acc_test[0, :]
         sum_val_array_single_chain_plot = sum_val_array[0]
 
         path = 'mnist_torch/CNN/graphs'
 
         x2 = np.linspace(0, self.NumSamples, num=self.NumSamples)
-
 
         plt.plot(x2, sum_val_array_single_chain_plot, label='Sum Value')
         plt.legend(loc='upper right')
@@ -917,8 +900,6 @@ class ParallelTempering:
         plt.legend()
         plt.savefig(path + '/superimposed_rmse_single_chain.png')
         plt.clf()
-
-
 
         """
         fig2, ax7 = plt.subplots()
@@ -960,10 +941,8 @@ class ParallelTempering:
         fig3.tight_layout()  # otherwise the right y-label is slightly clipped
         plt.savefig(path + '/superimposed_rmse_single_chain.png')
         plt.clf()
-        
+
         """
-
-
 
         rmse_train = rmse_train.reshape((self.num_chains * self.NumSamples), 1)
         acc_train = acc_train.reshape((self.num_chains * self.NumSamples), 1)
@@ -976,12 +955,9 @@ class ParallelTempering:
         weight_ar3 = weight_ar3.reshape((self.num_chains * self.NumSamples), 1)
         weight_ar4 = weight_ar4.reshape((self.num_chains * self.NumSamples), 1)
 
-
-        x = np.linspace(0, int(self.masternumsample - self.masternumsample * self.burni), num=int(self.masternumsample - self.masternumsample * self.burni))
+        x = np.linspace(0, int(self.masternumsample - self.masternumsample * self.burni),
+                        num=int(self.masternumsample - self.masternumsample * self.burni))
         x1 = np.linspace(0, self.masternumsample, num=self.masternumsample)
-
-
-
 
         plt.plot(x1, weight_ar, label='Weight[0]')
         plt.legend(loc='upper right')
@@ -1075,9 +1051,6 @@ class ParallelTempering:
         plt.savefig(path + '/superimposed_rmse.png')
         plt.clf()
 
-
-
-
         """
         fig, ax1 = plt.subplots()
 
@@ -1143,19 +1116,19 @@ class ParallelTempering:
         acc_train = np.append(acc_train, chain1_acctrain)
         acc_test = np.append(acc_test, chain1_acctest) '''
 
-        #accept_vec = accept_list
+        # accept_vec = accept_list
 
-        #accept = np.sum(accept_percent) / self.num_chains
+        # accept = np.sum(accept_percent) / self.num_chains
 
         # np.savetxt(self.path + '/pos_param.txt', posterior.T)  # tcoment to save space
 
-        #np.savetxt(self.path + '/likelihood.txt', likelihood_vec.T, fmt='%1.5f')
+        # np.savetxt(self.path + '/likelihood.txt', likelihood_vec.T, fmt='%1.5f')
 
-        #np.savetxt(self.path + '/accept_list.txt', accept_list, fmt='%1.2f')
+        # np.savetxt(self.path + '/accept_list.txt', accept_list, fmt='%1.2f')
 
-        #np.savetxt(self.path + '/acceptpercent.txt', [accept], fmt='%1.2f')
+        # np.savetxt(self.path + '/acceptpercent.txt', [accept], fmt='%1.2f')
 
-        #return posterior, fx_train_all, fx_test_all, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec.T, accept_vec, accept
+        # return posterior, fx_train_all, fx_test_all, rmse_train, rmse_test, acc_train, acc_test, likelihood_vec.T, accept_vec, accept
         return rmse_train, rmse_test, acc_train, acc_test, accept_percentage_all_chains
 
     def make_directory(self, directory):
@@ -1164,7 +1137,6 @@ class ParallelTempering:
 
 
 def main():
-
     topology = [input_size, hidden_size, num_classes]
 
     net1 = 'CNN'
@@ -1178,38 +1150,32 @@ def main():
     maxtemp = 2
     use_langevin_gradients = True  # False leaves it as Random-walk proposals. Note that Langevin gradients will take a bit more time computationally
     bi = burn_in
-    swap_interval = int(swap_ratio * numSamples / num_chains)  # int(swap_ratio * (NumSample/num_chains)) #how ofen you swap neighbours. note if swap is more than Num_samples, its off
-
-
+    swap_interval = int(
+        swap_ratio * numSamples / num_chains)  # int(swap_ratio * (NumSample/num_chains)) #how ofen you swap neighbours. note if swap is more than Num_samples, its off
 
     # learn_rate = 0.01  # in case langevin gradients are used. Can select other values, we found small value is ok.
-
 
     problemfolder = 'mnist_torch/' + net1  # change this to your directory for results output - produces large datasets
 
     name = ""
     filename = ""
 
-
     if not os.path.exists(problemfolder + name):
         os.makedirs(problemfolder + name)
     path = (problemfolder + name)
-
 
     timer = time.time()
 
     pt = ParallelTempering(use_langevin_gradients, learning_rate, topology, num_chains, maxtemp, numSamples,
                            swap_interval, path, batch_size, bi, net1, step_size)
 
-    directories = [path + '/predictions/', path+'/graphs/']
+    directories = [path + '/predictions/', path + '/graphs/']
     for d in directories:
         pt.make_directory((filename) + d)
 
     pt.initialize_chains(burn_in)
-    #pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_rep, swap_perc, accept_vec, accept = pt.run_chains()
+    # pos_w, fx_train, fx_test, rmse_train, rmse_test, acc_train, acc_test, likelihood_rep, swap_perc, accept_vec, accept = pt.run_chains()
     rmse_train, rmse_test, acc_train, acc_test, accept_percent_all, sp = pt.run_chains()
-
-
 
     timer2 = time.time()
 
@@ -1218,9 +1184,7 @@ def main():
     # accept_per = np.mean(accept_ratio) * 100
     # print(accept_per, ' accept_per')
 
-    timetotal = (timer2 - timer) /60
-
-
+    timetotal = (timer2 - timer) / 60
 
     """
     # #PLOTS
@@ -1241,7 +1205,7 @@ def main():
     rmsetes_max = np.amax(rmse_test[:])
     """
 
-    burnin=burn_in
+    burnin = burn_in
 
     acc_tr = np.mean(acc_train[int(numSamples * burnin):])
     acctr_std = np.std(acc_train[int(numSamples * burnin):])
@@ -1268,7 +1232,7 @@ def main():
     # xv = name+'_'+ str(run_nb)
     print("\n\n\n\n")
     print("Train Acc (Mean, Max, Std)")
-    print (acc_tr, acctr_max, acctr_std)
+    print(acc_tr, acctr_max, acctr_std)
     print("\n")
     print("Test Acc (Mean, Max, Std)")
     print(acc_tes, acctes_max, acctest_std)
@@ -1287,5 +1251,6 @@ def main():
     print("\n")
     print("Time (Minutes)")
     print(timetotal)
+
 
 if __name__ == "__main__": main()
