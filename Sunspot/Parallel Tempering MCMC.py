@@ -1317,4 +1317,5 @@ def main():
     print("Time (Minutes)")
     print(timetotal)
 
-
+if __name__ == "__main__":
+    main()
