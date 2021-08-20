@@ -1,11 +1,17 @@
 import numpy as np
+from numpy import array
 import copy
+import pandas as pd
 #data = np.genfromtxt("https://raw.githubusercontent.com/sydney-machine-learning/BayesianCNN/master/Time-Series/data/ashok_mar19_mar20.csv", delimiter =',' , )[1:,1:]
-data = np.loadtxt("/home/shravan/Desktop/Bayesian CNN/notebooks/parallel-tempering-neural-net-master/multicore-pt-regression/Data_OneStepAhead/Sunspot/train.txt")
-data_test = np.loadtxt( "/home/shravan/Desktop/Bayesian CNN/notebooks/parallel-tempering-neural-net-master/multicore-pt-regression/Data_OneStepAhead/Sunspot/test.txt")
+train = pd.read_csv("/home/shravan/Desktop/Sunspot/deeplearning_timeseries-master/data/Sunspot/train1.csv")
+test = pd.read_csv( "/home/shravan/Desktop/Sunspot/deeplearning_timeseries-master/data/Sunspot/test1.csv")
 #data = np.array(data, dtype = object)
-print(data.shape)
-print(data_test.shape)
+print(train.shape)
+print(test.shape)
+train.drop(labels=train.columns[0], axis=1, inplace=True)
+test.drop(labels=train.columns[0], axis=1, inplace=True)
+#np.asarray(train).reshape(585,1,15)
+
 
 import torch
 import torch.nn as nn
@@ -30,62 +36,56 @@ import argparse
 import pickle
 from sklearn import preprocessing
 
-from sklearn import preprocessing
-data = preprocessing.normalize(data)
-data_test = preprocessing.normalize(data_test)
+def split_sequence(sequence, n_steps_in, n_steps_out):
+    X, y = list(), list()
+    for i in range(len(sequence)):
+        # find the end of this pattern
+        sequence = np.asarray(sequence)
+        end_ix = i + n_steps_in
+        out_end_ix = end_ix + n_steps_out
+        # check if we are beyond the sequence
+        if out_end_ix > len(sequence):
+            break
+        # gather input and output parts of the pattern
+        seq_x, seq_y = sequence[i][0:5], sequence[i][5:15]
+        X.append(seq_x)
+        y.append(seq_y)
+    return array(X), array(y)
 
-print(data.shape)
-print(data_test.shape)
-data = np.append(data,data_test,axis =0)
-print(data.shape)
+n_steps_in, n_steps_out = 5,10
+train_X, train_Y = split_sequence(train, n_steps_in, n_steps_out)
+test_X, test_Y= split_sequence(test, n_steps_in, n_steps_out)
 
-def split_sequences(sequences, n_steps):
-	X, y = list(), list()
-	for i in range(len(sequences)):
-		end_ix = i + n_steps
-		if end_ix > len(sequences)-1:
-			break
-		seq_x, seq_y = sequences[i:end_ix, :], sequences[end_ix, :]
-		X.append(seq_x)
-		y.append(seq_y)
-	return np.array(X), np.array(y)
-
-step_size = 5#10
-X, y = split_sequences(data, step_size)
-
-def shuffle_in_unison(a, b):
-    assert len(a) == len(b) ##check if this value matches at the end of execution of the function
-    shuffled_a = np.empty(a.shape, dtype=a.dtype)
-    shuffled_b = np.empty(b.shape, dtype=b.dtype)
-    permutation = np.random.permutation(len(a))
-    for old_index, new_index in enumerate(permutation):
-        shuffled_a[new_index] = a[old_index]
-        shuffled_b[new_index] = b[old_index]
-    return shuffled_a, shuffled_b
+train_X = train_X.reshape(571,1,5)[0:570]
+train_Y = train_Y.reshape(571,1,10)[0:570]
+test_X = test_X.reshape(371,1,5)[0:370]
+test_Y = test_Y.reshape(371,1,10)[0:370]
+print(train_X.shape)
+print(train_Y.shape)
+print(test_X.shape)
+print(test_Y.shape)
 
 
-X, y = shuffle_in_unison(X, y)
-train_size = 298
+
 
 from torch.utils.data import TensorDataset
 def data_load(data='train'):
     if data == 'test':
         # transform to torch tensor
-        tensor_x = torch.Tensor(np.expand_dims(X[train_size:, :, :], axis=1))
-        tensor_y = torch.Tensor(y[train_size:, :])
+        tensor_x = torch.Tensor(train_X)
+        tensor_y = torch.Tensor(train_Y)
         a = TensorDataset(tensor_x, tensor_y)
 
     else:
         # transform to torch tensor
-        tensor_x = torch.Tensor(np.expand_dims(X[:train_size, :, :], axis=1))
-        tensor_y = torch.Tensor(y[:train_size, :])
+        tensor_x = torch.Tensor(test_X)
+        tensor_y = torch.Tensor(test_Y)
         a = TensorDataset(tensor_x, tensor_y)
 
-    data_loader = torch.utils.data.DataLoader(
-        a, batch_size=batch_Size, shuffle=True)
+    data_loader = torch.utils.data.DataLoader(a, batch_size=batch_Size, shuffle=True)
     return data_loader
-  
-  from torch import nn
+
+from torch import nn
 
 device = 'cpu'
 
@@ -94,36 +94,28 @@ samples_run = 0
 load = False
 # Hyper-Parameters
 
-input_size = 320  # Junk
+input_size = 5  # Junk
 hidden_size = 50  # Junk
 num_layers = 2  # Junk
-num_classes = 5#10
-batch_size = 16
+num_classes = 10
+batch_size = 10
 batch_Size = batch_size
-step_size = 5#10
+step_size = 0.005#10
 
 class Model(nn.Module):
     
     def __init__(self, topo, lrate, batch_size, cnn_net='CNN'):
         super(Model, self).__init__()
         if cnn_net == 'CNN':
-            self.conv1 = nn.Conv2d(1, 6, (2, 3))
-            self.pool = nn.MaxPool2d(2, 2, padding=1)
-            self.conv2 = nn.Conv2d(6, 16, (3,2))
-            self.fc1 = nn.Linear(16,50)#(128, 50)
-            self.fc2 = nn.Linear(50,5)#(50, 17)
+            self.conv1 = nn.Conv1d(in_channels = 1, out_channels = 64, kernel_size = 3, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros')
+            self.pool = nn.MaxPool1d(2)
+            self.fc1 = nn.Linear(64,10)
+            self.fc2 = nn.Linear(10,10)#n_outputs) #n_outputs = 6
 
-            # self.conv1 = nn.Conv2d(32, 64, 3, 1, padding=1)
-            # self.conv2 = nn.Conv2d(64, 32, 3, 1, padding=1)
-            # self.pool1 = nn.MaxPool2d(2)
-            # #self.conv3 = nn.Conv2d(32, 64, 5, 1)
-            # self.fc1 = nn.Linear(800, 10)
-            # self.fc2 = nn.Linear(128, 10)
             self.batch_size = batch_size
             self.sigmoid = nn.Sigmoid()
             self.topo = topo
             self.los = 0
-            # self.softmax = nn.Softmax(dim=1)
             self.criterion = torch.nn.MSELoss()
             self.optimizer = torch.optim.Adam(self.parameters(), lr=lrate)
             self.softmax = nn.Softmax(dim=1)
@@ -132,15 +124,12 @@ class Model(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        # x = F.max_pool2d(x, 2)
-        x = self.pool(x)
-        x = F.relu(self.conv2(x))
         x = self.pool(x)
         x = torch.flatten(x, 1)
         x = F.relu(x)
         x = self.fc1(x)
-        x = F.relu(x)
-        x = self.fc2(x)
+        #x = self.fc2(x)
+        #x = self.sigmoid(x)
         return x
     
     #Used to apply softmax and obtain loss value
@@ -149,7 +138,7 @@ class Model(nn.Module):
         if w is not None:
             self.loadparameters(w)
         flag = False
-        y_pred = torch.zeros((len(data), self.batch_size, 17))
+        y_pred = torch.zeros((len(data), self.batch_size, 10))
         for i, sample in enumerate(data, 0):
             inputs, labels = sample
             predicted = copy.deepcopy(self.forward(inputs).detach())
@@ -162,7 +151,10 @@ class Model(nn.Module):
             #y_pred[i] = predicted
             # b = copy.deepcopy(a)
             # prob[i] = self.softmax(b)
-            loss = self.criterion(predicted, labels)
+            loss = self.criterion(predicted, labels.reshape(10,10))
+            #print("Predicted is ", predicted, end ="$$")
+            #print("Labels  : ", labels.reshape(10,10))
+            #print(loss.item(), ' is loss eval', i)
             self.los += loss
         return y_pred
     
@@ -175,12 +167,12 @@ class Model(nn.Module):
             inputs, labels = sample
             outputs = self.forward(inputs)
             # _, predicted = torch.max(outputs.data, 1)
-            loss = self.criterion(outputs, labels)
+            loss = self.criterion(outputs, labels.reshape(10,10))
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             # if (i % 50 == 0):
-            # print(loss.item(), ' is loss', i)
+            #print(loss.item(), ' is loss langevin', i)
             self.los += copy.deepcopy(loss.item())
         return copy.deepcopy(self.state_dict())
     
@@ -223,6 +215,7 @@ class Model(nn.Module):
         self.loadparameters(dic)
         return dic
     
+    
 class MCMC:
     def __init__(self, samples, topology, use_langevin_gradients, lr, batch_size):
         self.samples = samples
@@ -259,6 +252,7 @@ class MCMC:
         # rmse = self.rmse(fx,y)
         # print("proposal calculated")
         rmse = copy.deepcopy(self.cnn.los) / len(data)
+        #print("RMSE: ", rmse)
         loss = np.sum(-0.5*np.log(2*math.pi*tau_sq) - 0.5 *
                       np.square(y.numpy()-fx.numpy())/tau_sq)
         return [np.sum(loss) , fx, rmse] #/ self.adapttemp
@@ -270,6 +264,10 @@ class MCMC:
         log_loss = part1 - part2
         return log_loss
     
+    def rmse(self,pred, actual):
+        error = np.subtract(pred, actual)
+        sqerror= np.sum(np.square(error))/actual.shape[0]
+        return np.sqrt(sqerror)
     
     def sampler(self):
         # print("chian running")
@@ -390,6 +388,7 @@ class MCMC:
             old_w = cnn.state_dict()
 
             if ((self.use_langevin_gradients is True) and (lx < self.l_prob)): #(langevin_count < self.langevin_step) or 
+                #print("Length of Train ", len(train))
                 w_gd = cnn.langevin_gradient(train)
                 w_proposal = cnn.addnoiseandcopy(0, step_w)
                 w_prop_gd = cnn.langevin_gradient(train)
@@ -461,10 +460,10 @@ class MCMC:
             
             
             ll = cnn.getparameters()
-            #print(ll.shape)
+            print(ll.shape)
             weight_array[i] = ll[0]
             weight_array1[i] = ll[100]
-            #weight_array2[i] = ll[1000]
+            weight_array2[i] = ll[1000]
             #weight_array3[i] = ll[4000]
             #weight_array4[i] = ll[8000]
             
@@ -475,23 +474,42 @@ class MCMC:
         print ((num_accepted * 100 / (samples * 1.0)), '% was Accepted')
 
         print ((langevin_count * 100 / (samples * 1.0)), '% was Langevin')
+        final_preds = cnn.forward(torch.Tensor(test_X).float())
+        print(cnn.forward(torch.Tensor(test_X).float()))
+        print("Shape is :",final_preds.shape)
+        final_preds = final_preds.detach().numpy()
+        #test_Y = test_Y.reshape(370,10)
+    
+        for j in range(10):
+                plt.figure()
+                plt.plot(test_Y.reshape(370,10)[:,j], label='actual')
+                plt.plot(final_preds[:,j], label='predicted')
+                a = final_preds[:,j]
+                b = test_Y.reshape(370,10)[:,j]
+                print("RMSE for Step ",j+1,": ", self.rmse(a,b))
+                plt.ylabel('RMSE')  
+                plt.xlabel('Time (samples)') 
+                plt.title('Actual vs Predicted')
+                plt.legend()
+                #plt.savefig("Results/"+name+"/"+Mname+'/pred_Step'+str(j+1)+'.png',dpi=300) 
+                plt.show()
+                plt.close()
 
         return  rmse_train, rmse_test, sum_value_array, weight_array, weight_array1, weight_array2 #acc_train, acc_test,
 
-
- input_size = 320  # Junk
+input_size = 320  # Junk
 hidden_size = 50  # Junk
 num_layers = 2  # Junk
 num_classes = 5#10
-batch_size = 16
+batch_size = 10
 batch_Size = batch_size
-step_size = 5#10
+step_size = 0.005#10
 
 outres = open('resultspriors.txt', 'w')
 
 topology = [input_size, hidden_size, num_classes]
 
-numSamples = 2000
+numSamples = 1000
 ulg = True
 
 learnr=0.01
@@ -530,24 +548,24 @@ x1 = np.linspace(0, numSamples, num=numSamples)
 plt.plot(x1, wa, label='Weight[0]')
 plt.legend(loc='upper right')
 plt.title("Weight[0] Trace")
-plt.savefig('mnist_torch_single_chain' + '/weight[0]_samples.png')
+plt.savefig('timeseries_torch_single_chain' + '/weight[0]_samples.png')
 plt.clf()
 
 plt.plot(x1, wa1, label='Weight[100]')
 plt.legend(loc='upper right')
 plt.title("Weight[100] Trace")
-plt.savefig('mnist_torch_single_chain' + '/weight[100]_samples.png')
+plt.savefig('timeseries_torch_single_chain' + '/weight[100]_samples.png')
 plt.clf()
 
-plt.plot(x1,wa2, label='Weight[50000]')
+plt.plot(x1,wa2, label='Weight[1000]')
 plt.legend(loc='upper right')
 plt.title("Weight[50000] Trace")
-plt.savefig('mnist_torch_single_chain' + '/weight[50000]_samples.png')
+plt.savefig('timeseries_torch_single_chain' + '/weight[1000]_samples.png')
 plt.clf()
 plt.plot(x, sva, label='Sum_Value')
 plt.legend(loc='upper right')
 plt.title("Sum Value Over Samples")
-plt.savefig('mnist_torch_single_chain'+'/sum_value_samples.png')
+plt.savefig('timeseries_torch_single_chain'+'/sum_value_samples.png')
 plt.clf()
 
 
@@ -579,7 +597,7 @@ ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
     #ax3.tick_params(axis='y', labelcolor=color)
 
 fig.tight_layout()  # otherwise the right y-label is slightly clipped
-plt.savefig('mnist_torch_single_chain' + '/superimposed_acc.png')
+plt.savefig('timeseries_torch_single_chain' + '/superimposed_acc.png')
 plt.clf()
 fig1, ax4 = plt.subplots()
 color = 'tab:red'
@@ -603,5 +621,5 @@ ax5.tick_params(axis='y', labelcolor=color)
     #ax6.tick_params(axis='y', labelcolor=color)
 
 fig.tight_layout()  # otherwise the right y-label is slightly clipped
-plt.savefig('mnist_torch_single_chain' + '/superimposed_rmse.png')
+plt.savefig('timeseries_torch_single_chain' + '/superimposed_rmse.png')
 plt.clf()
