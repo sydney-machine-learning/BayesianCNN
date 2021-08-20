@@ -78,9 +78,9 @@ from tensorflow.keras.layers import Flatten,Dense,Conv1D, MaxPooling1D, Activati
 from tensorflow.keras import Model
 from tensorflow import keras
 
-class MyModel(tf.keras.Model):
+class Model(tf.keras.Model):
     def __init__(self):
-        super(MyModel, self).__init__()
+        super(Model, self).__init__()
         self.conv1 = tf.keras.layers.Conv1D(64,3, activation = tf.nn.relu, input_shape = (5,1,))
         self.pool = tf.keras.layers.MaxPooling1D(2)
         self.flatten = tf.keras.layers.Flatten()
@@ -93,7 +93,44 @@ class MyModel(tf.keras.Model):
         x = self.flatten(x)
         x = self.fc1(x)
         return self.fc2(x)
+    
+    def evaluate_proposal(self, data, w=None):
+        self.los = 0
+        #if w is None:
+            #self.load_parameters(w)
+        flag = False
+        y_pred = np.zeros((len(data), 10, 10))
+        for i, sample in enumerate(data, 0):
+            inputs, labels = sample
+            inputs = tf.reshape(inputs, shape = (10,5,1))
+            #predicted = copy.deepcopy(tf.stop_gradient(self.call(inputs)))
+            predicted = copy.deepcopy(self.call(inputs))
+            print("length of predicted :", len(predicted))
+            if(flag):
+                y_pred = np.append(y_pred, predicted).reshape((i+1)*10,10)
+                print("length of y_pred : ", len(y_pred))
+            else:
+                flag = True
+                y_pred = predicted
+            loss = self.criterion(predicted, tf.reshape(labels, shape = (10,10)))
+            #print(len(y_pred))
+            self.los += loss
+        return y_pred
  
-Model_1 = MyModel()
-Model_1.compile(optimizer="Adam", loss="mse")
-Model_1.predict(train_X[0])
+model = Model(lrate = 0.01, batch_size =10, cnn_net = 'CNN')
+model.predict(train_X[0:10].reshape(10,5,1))
+data = data_load('train')
+model.evaluate_proposal(data)
+
+loss = 0
+for i, sample in enumerate(data):
+    inputs, labels = sample
+    outputs = model.predict(tf.reshape((inputs), shape = (10,5,1)))
+    print(outputs)
+    loss = model.criterion(outputs, tf.reshape(labels,shape = (10,10)))
+    print("Loss:", loss)
+    with tf.GradientTape() as tape:
+        tape.reset()
+        grads = tape.gradient(loss, model.trainable_weights)
+        print(grads)
+        model.optimizer.apply_gradients(zip(grads, model.trainable_weights))
